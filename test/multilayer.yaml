@@ -1,0 +1,172 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: default
+  name: pod-reader
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["list", "get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pod-reader-binding
+  namespace: default
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: default
+roleRef:
+  kind: Role
+  name: pod-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+# --- STEP 1 SERVICE ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nn-step-1
+spec:
+  type: LoadBalancer           # <--- aggiungi questa riga per esporlo fuori dal cluster
+  selector:
+    app: nn-service
+    step: "1"
+  ports:
+  - port: 5000
+    targetPort: 5000
+---
+# --- STEP 1 CONFIGMAP ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: step-1-config
+data:
+  STEP_ID: "1"
+  LAYER_START: "0"
+  LAYER_COUNT: "3"
+---
+# --- STEP 2 CONFIGMAP ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: step-2-config
+data:
+  STEP_ID: "2"
+  LAYER_START: "3"
+  LAYER_COUNT: "5"
+---
+# --- STEP 1 DEPLOYMENT ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nn-step-1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nn-service
+      step: "1"
+  template:
+    metadata:
+      labels:
+        app: nn-service
+        step: "1"
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: nano92
+      containers:
+      - name: nn
+        image: dami00/multilayer_service
+        imagePullPolicy: Always
+        envFrom:
+        - configMapRef:
+            name: step-1-config
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        ports:
+        - containerPort: 5000
+        resources:
+          limits:
+            nvidia.com/gpu.shared: 1
+        volumeMounts:
+        - mountPath: /usr/local/cuda
+          name: cuda-volume
+        - mountPath: /usr/lib/aarch64-linux-gnu
+          name: lib-volume
+      volumes:
+      - name: cuda-volume
+        hostPath:
+          path: /usr/local/cuda
+          type: Directory
+      - name: lib-volume
+        hostPath:
+          path: /usr/lib/aarch64-linux-gnu
+          type: Directory
+---
+# --- STEP 2 DEPLOYMENT ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nn-step-2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nn-service
+      step: "2"
+  template:
+    metadata:
+      labels:
+        app: nn-service
+        step: "2"
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: nano92
+      containers:
+      - name: nn
+        image: dami00/multilayer_service
+        imagePullPolicy: Always
+        envFrom:
+        - configMapRef:
+            name: step-2-config
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        ports:
+        - containerPort: 5000
+        resources:
+          limits:
+            nvidia.com/gpu.shared: 1
+        volumeMounts:
+        - mountPath: /usr/local/cuda
+          name: cuda-volume
+        - mountPath: /usr/lib/aarch64-linux-gnu
+          name: lib-volume
+      volumes:
+      - name: cuda-volume
+        hostPath:
+          path: /usr/local/cuda
+          type: Directory
+      - name: lib-volume
+        hostPath:
+          path: /usr/lib/aarch64-linux-gnu
+          type: Directory
+---
+# --- STEP 2 SERVICE ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nn-step-2
+spec:
+  selector:
+    app: nn-service
+    step: "2"
+  ports:
+  - port: 5000
+    targetPort: 5000
