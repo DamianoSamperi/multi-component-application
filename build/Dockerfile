@@ -21,11 +21,32 @@ RUN wget https://ftpmirror.gnu.org/gcc/gcc-10.1.0/gcc-10.1.0.tar.xz && \
     ../configure --prefix=/usr/local/gcc-10.1.0 --enable-languages=c,c++ --disable-multilib && \
     make -j$(nproc) && sudo make install && cd ../.. && rm -rf gcc-10.1.0 gcc-10.1.0.tar.xz
 
-# Set GCC 10.1 as default
-RUN sudo update-alternatives --install /usr/bin/gcc gcc /usr/local/gcc-10.1.0/bin/gcc 100 \
-    --slave /usr/bin/g++ g++ /usr/local/gcc-10.1.0/bin/g++ \
-    --slave /usr/bin/cpp cpp /usr/local/gcc-10.1.0/bin/cpp
-
+# Crea i symlink per usare la nuova toolchain
+RUN sudo rm -f /usr/bin/cpp && \
+    sudo ln -s /usr/local/gcc-10.1.0/bin/cpp-10.1 /usr/bin/cpp && \
+    sudo rm -f /usr/bin/g++ && \
+    sudo ln -s /usr/local/gcc-10.1.0/bin/aarch64-linux-gnu-g++-10.1 /usr/bin/g++ && \
+    sudo rm -f /usr/bin/gcc && \
+    sudo ln -s /usr/local/gcc-10.1.0/bin/aarch64-linux-gnu-gcc-10.1 /usr/bin/gcc && \
+    sudo rm -f /usr/bin/gcc-ar && \
+    sudo ln -s /usr/local/gcc-10.1.0/bin/aarch64-linux-gnu-gcc-ar-10.1 /usr/bin/gcc-ar && \
+    sudo rm -f /usr/bin/gcc-nm && \
+    sudo ln -s /usr/local/gcc-10.1.0/bin/aarch64-linux-gnu-gcc-nm-10.1 /usr/bin/gcc-nm && \
+    sudo rm -f /usr/bin/gcc-ranlib && \
+    sudo ln -s /usr/local/gcc-10.1.0/bin/aarch64-linux-gnu-gcc-ranlib-10.1 /usr/bin/gcc-ranlib && \
+    sudo rm -f /usr/bin/aarch64-linux-gnu-cpp && \
+    sudo ln -s /usr/local/gcc-10.1.0/bin/cpp-10.1 /usr/bin/aarch64-linux-gnu-cpp && \
+    sudo rm -f /usr/bin/aarch64-linux-gnu-g++ && \
+    sudo ln -s /usr/local/gcc-10.1.0/bin/aarch64-linux-gnu-g++-10.1 /usr/bin/aarch64-linux-gnu-g++ && \
+    sudo rm -f /usr/bin/aarch64-linux-gnu-gcc && \
+    sudo ln -s /usr/local/gcc-10.1.0/bin/aarch64-linux-gnu-gcc-10.1 /usr/bin/aarch64-linux-gnu-gcc && \
+    sudo rm -f /usr/bin/aarch64-linux-gnu-gcc-ar && \
+    sudo ln -s /usr/local/gcc-10.1.0/bin/aarch64-linux-gnu-gcc-ar-10.1 /usr/bin/aarch64-linux-gnu-gcc-ar && \
+    sudo rm -f /usr/bin/aarch64-linux-gnu-gcc-nm && \
+    sudo ln -s /usr/local/gcc-10.1.0/bin/aarch64-linux-gnu-gcc-nm-10.1 /usr/bin/aarch64-linux-gnu-gcc-nm && \
+    sudo rm -f /usr/bin/aarch64-linux-gnu-gcc-ranlib && \
+    sudo ln -s /usr/local/gcc-10.1.0/bin/aarch64-linux-gnu-gcc-ranlib-10.1 /usr/bin/aarch64-linux-gnu-gcc-ranlib && \
+    rm -rf /root/*.tar.gz /root/*.xz
 # Build glslang
 RUN git clone https://github.com/KhronosGroup/glslang.git && \
     cd glslang && git checkout tags/15.0.0 && \
