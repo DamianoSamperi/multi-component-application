@@ -1,6 +1,8 @@
 flask
 #torch
 #torchvision
+moviepy==1.0.1
+typing
 numpy
 requests
 kubernetes
