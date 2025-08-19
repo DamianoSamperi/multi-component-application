@@ -85,6 +85,12 @@ RUN git clone https://github.com/nihui/realsr-ncnn-vulkan.git && \
 ###########################################
 FROM dustynv/jetson-inference:r32.7.1
 
+# Rimuove documentazione, build e librerie non utilizzate
+RUN rm -rf /jetson-inference/docs /jetson-inference/build /usr/local/lib/python3.6/dist-packages/torch/test /tmp/* \
+    && rm -rf /usr/lib/aarch64-linux-gnu/python* /usr/lib/aarch64-linux-gnu/pkgconfig \
+    && pip3 uninstall -y plotly botocore pandas \
+    && rm -rf /usr/local/lib/python3.6/dist-packages/plotly /usr/local/lib/python3.6/dist-packages/botocore /usr/local/lib/python3.6/dist-packages/pandas
+
 WORKDIR /app
 
 # Install runtime dependencies
