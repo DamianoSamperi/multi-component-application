@@ -12,14 +12,33 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libssl-dev libvulkan-dev git cmake ninja-build python3-dev python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
+# (Opzionale) Rimuovi cmake preinstallato se non ti serve
+RUN sudo apt-get remove --purge -y cmake
+# Installa cmake dalla sorgente
+RUN wget https://cmake.org/files/v3.20/cmake-3.20.0.tar.gz && \
+    tar -xzvf cmake-3.20.0.tar.gz && \
+    cd cmake-3.20.0 && \
+    ./bootstrap && \
+    make -j4 && \
+    sudo make install && \
+    cd .. && rm -rf cmake-3.20.0 cmake-3.20.0.tar.gz
 # Build and install GCC 10.1
 RUN wget https://ftpmirror.gnu.org/gcc/gcc-10.1.0/gcc-10.1.0.tar.xz && \
     tar xf gcc-10.1.0.tar.xz && \
     cd gcc-10.1.0 && \
     sudo contrib/download_prerequisites && \
     mkdir gcc10build && cd gcc10build && \
-    ../configure --prefix=/usr/local/gcc-10.1.0 --enable-languages=c,c++ --disable-multilib && \
-    make -j$(nproc) && sudo make install && cd ../.. && rm -rf gcc-10.1.0 gcc-10.1.0.tar.xz
+    ../configure -v \
+      --build=aarch64-linux-gnu \
+      --host=aarch64-linux-gnu \
+      --target=aarch64-linux-gnu \
+      --prefix=/usr/local/gcc-10.1.0 \
+      --enable-checking=release \
+      --enable-languages=c,c++ \
+      --disable-multilib \
+      --disable-libstdcxx-pch \
+      --program-suffix=-10.1 && \
+    make -j$(nproc) && sudo make install-strip && cd ../.. && rm -rf gcc-10.1.0 gcc-10.1.0.tar.xz
 
 # Crea i symlink per usare la nuova toolchain
 RUN sudo rm -f /usr/bin/cpp && \
@@ -47,6 +66,7 @@ RUN sudo rm -f /usr/bin/cpp && \
     sudo rm -f /usr/bin/aarch64-linux-gnu-gcc-ranlib && \
     sudo ln -s /usr/local/gcc-10.1.0/bin/aarch64-linux-gnu-gcc-ranlib-10.1 /usr/bin/aarch64-linux-gnu-gcc-ranlib && \
     rm -rf /root/*.tar.gz /root/*.xz
+
 # Build glslang
 RUN git clone https://github.com/KhronosGroup/glslang.git && \
     cd glslang && git checkout tags/15.0.0 && \
@@ -76,6 +96,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /usr/local/gcc-10.1.0 /usr/local/gcc-10.1.0
 COPY --from=builder /usr/bin/gcc /usr/bin/gcc
 COPY --from=builder /usr/bin/g++ /usr/bin/g++
+# Add libexec so gcc può trovare cc1/cc1plus
+ENV PATH=/usr/local/gcc-10.1.0/bin:$PATH \
+    LD_LIBRARY_PATH=/usr/local/gcc-10.1.0/lib64:$LD_LIBRARY_PATH
 
 # Copy realsr-ncnn-vulkan built binaries
 COPY --from=builder /root/realsr-ncnn-vulkan /root/realsr-ncnn-vulkan
@@ -89,12 +112,19 @@ ENV OPENBLAS_CORETYPE=ARMV8
 
 # Install Python dependencies
 COPY requirements.txt /app/
-RUN pip3 install --upgrade pip setuptools wheel && \
-    pip3 install --no-cache-dir -r requirements.txt && \
-    pip3 install flask requests opencv-python-headless pika imageio==2.6.1 imageio-ffmpeg==0.3.0
+
+RUN apt update && apt install --no-install-recommends -y python3-pip python3-dev build-essential cmake ninja-build && pip3 install --upgrade pip && pip3 install requests flask pika && \
+apt-get install -y python3-opencv && \
+#opencv-python-headless && \
+pip3 install --upgrade pip setuptools wheel && \
+pip3 install --no-cache-dir -r requirements.txt && \
+pip3 install  pika imageio==2.6.1 imageio-ffmpeg==0.3.0 &&\
+apt remove --purge -y python3-pip cmake ninja-build && \
+apt clean && rm -rf /var/lib/apt/lists/*
 
 # Copy application code
-COPY app.py upscaler.py classifier.py /app/
+COPY app.py  /app/
+COPY /steps /app/steps
 
 # Expose Flask port
 EXPOSE 5000
