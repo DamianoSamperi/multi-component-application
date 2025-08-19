@@ -42,12 +42,14 @@ metadata:
   name: pipeline-step-0
 data:
   PIPELINE_CONFIG: |
-    steps:
     step_id: 0
     total_steps: 2
+    steps:
       - type: "upscaling"
         params:
-          scale: 2.0
+          model_path: "../models/models-DF2K"
+          scale_factor: 2
+          tta: false
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -55,9 +57,9 @@ metadata:
   name: pipeline-step-1
 data:
   PIPELINE_CONFIG: |
-    steps:
     step_id: 1
     total_steps: 2
+    steps:
       - type: "detection"
         params:
           threshold: 0.5
