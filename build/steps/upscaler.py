@@ -9,7 +9,7 @@ class Upscaler:
         self.model_path = model_path
         self.scale_factor = str(scale_factor)
         self.tta = tta
-        self.cmd_base = ["./realsr-ncnn-vulkan", "-m", model_path, "-f", "jpg"]
+        self.cmd_base = ["/root/realsr-ncnn-vulkan/build/realsr-ncnn-vulkan", "-m", model_path, "-f", "jpg"]
 
     def run(self, image):
         with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as input_file:
