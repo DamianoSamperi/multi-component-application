@@ -3,7 +3,7 @@ import yaml
 from flask import Flask, request, jsonify
 from PIL import Image
 import io
-from kubernetes import client, config
+from kubernetes import client, config as k8s_config
 import requests
 
 from steps.upscaler import Upscaler
@@ -46,7 +46,7 @@ def process():
 
     # 2️⃣ Carica config Kubernetes per sapere i pod disponibili
     try:
-        config.load_incluster_config()
+        k8s_config.load_incluster_config()
         v1 = client.CoreV1Api()
         label_selector = f"app={APP_LABEL}"
         pods = v1.list_namespaced_pod(namespace=NAMESPACE, label_selector=label_selector)
