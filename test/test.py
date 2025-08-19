@@ -1,26 +1,19 @@
 import requests
-from PIL import Image
-import torchvision.transforms as transforms
-import torch
-import json
 
-# Carica e trasforma immagine
-img = Image.open("test.jpg").convert("RGB")
+image_file = "your_image.jpg"
+f = open(image_file, "rb")
+files = {"image": (image_file, f, "image/jpeg")}
 
-transform = transforms.Compose([
-    transforms.Resize((224, 224)),
-    transforms.ToTensor()
-])
+url = "http://192.168.1.211:5000/process"
 
-tensor = transform(img).unsqueeze(0)  # shape: (1, 3, 224, 224)
+response = requests.post(url, files=files)
 
-# Converti in lista JSON serializzabile
-x_input = tensor.numpy().tolist()
+f.close()  # chiudi solo dopo la richiesta
 
-# Invia richiesta POST
-url = "http://localhost:5000/process"
-response = requests.post(url, json={"x": x_input})
-
-# Stampa risposta
 print("Status:", response.status_code)
-print("Output:", response.text)
+if response.status_code == 200:
+    with open("output.jpg", "wb") as out:
+        out.write(response.content)
+    print("Immagine salvata come output.jpg")
+else:
+    print("Errore:", response.text)
