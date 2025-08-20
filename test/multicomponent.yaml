@@ -47,7 +47,7 @@ data:
       - id: 0
         type: "upscaling"
         params:
-          model_path: "~/realsr-ncnn-vulkan/models/models-DF2K_JPEG"
+          model_path: "/root/realsr-ncnn-vulkan/models/models-DF2K_JPEG"
           scale_factor: 4
           tta: false
         next_step: [1]
@@ -161,7 +161,7 @@ spec:
         step: "1"
     spec:
       nodeSelector:
-        kubernetes.io/hostname: nano93
+        kubernetes.io/hostname: nano96
       containers:
       - name: nn
         image: dami00/multicomponent_service
