@@ -47,7 +47,7 @@ data:
       - id: 0
         type: "upscaling"
         params:
-          model_path: "../models/models-DF2K"
+          model_path: "~/realsr-ncnn-vulkan/models/models-DF2K_JPEG"
           scale_factor: 4
           tta: false
         next_step: [1]
