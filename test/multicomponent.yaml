@@ -221,7 +221,7 @@ metadata:
 spec:
   selector:
     app: nn-service
-    step: "1"
+    step: "2"
   ports:
   - port: 5000
     targetPort: 5000
@@ -234,7 +234,7 @@ metadata:
 spec:
   selector:
     app: nn-service
-    step: "1"
+    step: "3"
   ports:
   - port: 5000
     targetPort: 5000
