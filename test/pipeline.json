@@ -1,36 +1,32 @@
 {
   "steps": [
     {
-      "id": 0,
       "type": "upscaling",
       "params": {
         "model_path": "/root/realsr-ncnn-vulkan/models/models-DF2K_JPEG",
         "scale_factor": 4,
         "tta": false
-      },
-      "next_step": [1]
+      }
     },
     {
-      "id": 1,
       "type": "detection",
       "params": {
         "model_name": "pednet",
         "threshold": 0.5
       },
-      "next_step": [2, 3],
       "preferred_next": 2
     },
-    {
-      "id": 2,
-      "type": "grayscale",
-      "params": {}
-    },
-    {
-      "id": 3,
-      "type": "deblur",
-      "params": {
-        "radius": 2
+    [
+      {
+        "type": "grayscale",
+        "params": {}
+      },
+      {
+        "type": "deblur",
+        "params": {
+          "radius": 2
+        }
       }
-    }
+    ]
   ]
 }
