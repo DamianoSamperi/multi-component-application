@@ -71,77 +71,95 @@ def generate_configmap(step, pipeline_id, namespace="default"):
         }
     )
 
+def generate_deployments(steps: List[Dict], pipeline_prefix: str, namespace="default") -> List[Dict]:
+    """
+    Genera i deployment per ogni step della pipeline.
+    """
+    deployments = []
 
-def generate_deployment(step, pipeline_id, namespace="default"):
-    volumes, volume_mounts = [], []
+    for step in steps:
+        step_id = step["id"]
+        deployment_name = f"{pipeline_prefix}-step-{step_id}"
 
-    # Gestione volumi
-    for vol in step.get("volumes", []):
-        if vol == "cuda":
-            volumes.append(client.V1Volume(
-                name="cuda-volume",
-                host_path=client.V1HostPathVolumeSource(path="/usr/local/cuda", type="Directory")
-            ))
-            volume_mounts.append(client.V1VolumeMount(mount_path="/usr/local/cuda", name="cuda-volume"))
-        elif vol == "lib":
-            volumes.append(client.V1Volume(
-                name="lib-volume",
-                host_path=client.V1HostPathVolumeSource(path="/usr/lib/aarch64-linux-gnu", type="Directory")
-            ))
-            volume_mounts.append(client.V1VolumeMount(mount_path="/usr/lib/aarch64-linux-gnu", name="lib-volume"))
-        elif vol == "jetson-inference":
-            volumes.append(client.V1Volume(
-                name="jetson-inference-volume",
-                host_path=client.V1HostPathVolumeSource(path="/home/administrator/jetson-inference", type="Directory")
-            ))
-            volume_mounts.append(client.V1VolumeMount(mount_path="/jetson-inference", name="jetson-inference-volume"))
+        # container base
+        container = {
+            "name": "nn",
+            "image": "dami00/multicomponent_service",
+            "imagePullPolicy": "Always",
+            "envFrom": [{"configMapRef": {"name": f"pipeline-step-{step_id}"}}],
+            "env": [
+                {"name": "POD_NAMESPACE", "valueFrom": {"fieldRef": {"fieldPath": "metadata.namespace"}}}
+            ],
+            "ports": [{"containerPort": 5000}],
+        }
 
-    resources = client.V1ResourceRequirements(
-        limits={"nvidia.com/gpu.shared": "1"} if step.get("gpu") else {}
-    )
+        # GPU
+        if step.get("gpu", False):
+            container["resources"] = {"limits": {"nvidia.com/gpu.shared": 1}}
 
-    container = client.V1Container(
-        name="nn",
-        image="dami00/multicomponent_service",
-        image_pull_policy="Always",
-        env_from=[client.V1EnvFromSource(config_map_ref=client.V1ConfigMapEnvSource(name=f"{pipeline_id}-step-{step['id']}"))],
-        env=[client.V1EnvVar(name="POD_NAMESPACE", value_from=client.V1EnvVarSource(field_ref=client.V1ObjectFieldSelector(field_path="metadata.namespace")))],
-        ports=[client.V1ContainerPort(container_port=5000)],
-        resources=resources,
-        volume_mounts=volume_mounts
-    )
+        # Volumes
+        volume_mounts = []
+        volumes = []
+        for vol in step.get("volumes", []):
+            if vol == "cuda":
+                volume_mounts.append({"mountPath": "/usr/local/cuda", "name": "cuda-volume"})
+                volumes.append({"name": "cuda-volume", "hostPath": {"path": "/usr/local/cuda", "type": "Directory"}})
+            elif vol == "lib":
+                volume_mounts.append({"mountPath": "/usr/lib/aarch64-linux-gnu", "name": "lib-volume"})
+                volumes.append({"name": "lib-volume", "hostPath": {"path": "/usr/lib/aarch64-linux-gnu", "type": "Directory"}})
+            elif vol == "jetson-inference":
+                volume_mounts.append({"mountPath": "/jetson-inference", "name": "jetson-inference-volume"})
+                volumes.append({"name": "jetson-inference-volume", "hostPath": {"path": "/home/administrator/jetson-inference", "type": "Directory"}})
 
-    template = client.V1PodTemplateSpec(
-        metadata=client.V1ObjectMeta(labels={"app": "nn-service", "step": str(step['id']), "pipeline_id": pipeline_id}),
-        spec=client.V1PodSpec(containers=[container], volumes=volumes)
-    )
+        if volume_mounts:
+            container["volumeMounts"] = volume_mounts
 
-    return client.V1Deployment(
-        api_version="apps/v1",
-        kind="Deployment",
-        metadata=client.V1ObjectMeta(name=f"{pipeline_id}-step-{step['id']}", namespace=namespace, labels={"pipeline_id": pipeline_id}),
-        spec=client.V1DeploymentSpec(
-            replicas=1,
-            selector=client.V1LabelSelector(match_labels={"app": "nn-service", "step": str(step['id']), "pipeline_id": pipeline_id}),
-            template=template
-        )
-    )
+        deployment = {
+            "apiVersion": "apps/v1",
+            "kind": "Deployment",
+            "metadata": {"name": deployment_name, "namespace": namespace},
+            "spec": {
+                "replicas": 1,
+                "selector": {"matchLabels": {"app": "nn-service", "step": str(step_id)}},
+                "template": {
+                    "metadata": {"labels": {"app": "nn-service", "step": str(step_id)}},
+                    "spec": {
+                        "containers": [container],
+                        "volumes": volumes if volumes else []
+                    },
+                },
+            },
+        }
+
+        deployments.append(deployment)
+
+    return deployments
 
 
-def generate_service(step, pipeline_id, namespace="default"):
-    return client.V1Service(
-        api_version="v1",
-        kind="Service",
-        metadata=client.V1ObjectMeta(
-            name=f"{pipeline_id}-step-{step['id']}",
-            namespace=namespace,
-            labels={"pipeline_id": pipeline_id}
-        ),
-        spec=client.V1ServiceSpec(
-            selector={"app": "nn-service", "step": str(step['id']), "pipeline_id": pipeline_id},
-            ports=[client.V1ServicePort(port=5000, target_port=5000)]
-        )
-    )
+def generate_services(steps: List[Dict], pipeline_prefix: str, namespace="default") -> List[Dict]:
+    """
+    Genera i service per ogni step della pipeline.
+    """
+    services = []
+
+    for step in steps:
+        step_id = step["id"]
+        service_name = f"{pipeline_prefix}-step-{step_id}"
+
+        service = {
+            "apiVersion": "v1",
+            "kind": "Service",
+            "metadata": {"name": service_name, "namespace": namespace},
+            "spec": {
+                "selector": {"app": "nn-service", "step": str(step_id)},
+                "ports": [{"port": 5000, "targetPort": 5000}],
+            },
+        }
+
+        services.append(service)
+
+    return services
+
 
 
 # --- Endpoints ---
