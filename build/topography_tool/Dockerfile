@@ -20,4 +20,4 @@ COPY . .
 
 # Flask server sulla porta 8080
 EXPOSE 8080
-CMD ["python", "pipeline_server.py"]
+CMD ["python", "topography.py"]
