@@ -81,15 +81,46 @@ def generate_configmaps(pipeline_json: Dict, namespace="default"):
         configmaps.append(cm)
 
     return configmaps
+    
 def generate_deployments_and_services(pipeline_json: Dict, namespace=NAMESPACE):
     steps = flatten_steps(pipeline_json["steps"])
 
     manifests = []
 
+    # Definizione volumi standard (se richiesti)
+    volume_defs = {
+        "cuda": {"name": "cuda-volume", "hostPath": {"path": "/usr/local/cuda", "type": "Directory"}},
+        "lib": {"name": "lib-volume", "hostPath": {"path": "/usr/lib/aarch64-linux-gnu", "type": "Directory"}},
+        "jetson-inference": {"name": "jetson-inference-volume", "hostPath": {"path": "/home/administrator/jetson-inference", "type": "Directory"}},
+    }
+
+    volume_mounts_defs = {
+        "cuda": {"name": "cuda-volume", "mountPath": "/usr/local/cuda"},
+        "lib": {"name": "lib-volume", "mountPath": "/usr/lib/aarch64-linux-gnu"},
+        "jetson-inference": {"name": "jetson-inference-volume", "mountPath": "/jetson-inference"},
+    }
+
     for step in steps:
         step_id = step["id"]
+        gpu_required = step.get("gpu", False)
+        volumes = step.get("volumes", [])
 
-        # Deployment
+        container = {
+            "name": f"nn-step-{step_id}",
+            "image": IMAGE,
+            "imagePullPolicy": "Always",
+            "ports": [{"containerPort": 5000}],
+            "envFrom": [{"configMapRef": {"name": f"pipeline-step-{step_id}"}}],
+        }
+
+        if gpu_required:
+            container["resources"] = {
+                "limits": {"nvidia.com/gpu.shared": 1}
+            }
+
+        if volumes:
+            container["volumeMounts"] = [volume_mounts_defs[v] for v in volumes]
+
         dep = {
             "apiVersion": "apps/v1",
             "kind": "Deployment",
@@ -100,23 +131,13 @@ def generate_deployments_and_services(pipeline_json: Dict, namespace=NAMESPACE):
                 "template": {
                     "metadata": {"labels": {"app": f"nn-step-{step_id}"}},
                     "spec": {
-                        "containers": [
-                            {
-                                "name": f"nn-step-{step_id}",
-                                "image": IMAGE,
-                                "imagePullPolicy": "Always",
-                                "ports": [{"containerPort": 5000}],
-                                "envFrom": [
-                                    {"configMapRef": {"name": f"pipeline-step-{step_id}"}}
-                                ]
-                            }
-                        ]
+                        "containers": [container],
+                        "volumes": [volume_defs[v] for v in volumes] if volumes else []
                     },
                 },
             },
         }
 
-        # Service
         svc = {
             "apiVersion": "v1",
             "kind": "Service",
@@ -132,6 +153,7 @@ def generate_deployments_and_services(pipeline_json: Dict, namespace=NAMESPACE):
         manifests.append(svc)
 
     return manifests
+
 
 def generate_rbac(namespace=NAMESPACE):
     role = {
