@@ -1,31 +1,39 @@
 {
   "steps": [
     {
-      "type": "detection",
-      "params": {
-        "model_name": "pednet",
-        "threshold": 0.5
-      },
-      "preferred_next": 2
-    },
-    {
       "type": "upscaling",
       "params": {
         "model_path": "/root/realsr-ncnn-vulkan/models/models-DF2K_JPEG",
         "scale_factor": 4,
         "tta": false
-      }
+      },
+      "gpu": true,
+      "volumes": ["cuda", "lib"]
+    },
+    {
+      "type": "detection",
+      "params": {
+        "model_name": "pednet",
+        "threshold": 0.5
+      },
+      "preferred_next": 2,
+      "gpu": true,
+      "volumes": ["cuda", "lib", "jetson-inference"]
     },
     [
       {
         "type": "grayscale",
-        "params": {}
+        "params": {},
+        "gpu": true,
+        "volumes": ["cuda", "lib"]
       },
       {
         "type": "deblur",
         "params": {
           "radius": 2
-        }
+        },
+        "gpu": true,
+        "volumes": ["cuda", "lib"]
       }
     ]
   ]
