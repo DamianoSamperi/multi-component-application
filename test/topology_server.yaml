@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pipeline-controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pipeline-controller
+  template:
+    metadata:
+      labels:
+        app: pipeline-controller
+    spec:
+      serviceAccountName: default
+      containers:
+      - name: controller
+        image: dami00/topology-controller:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pipeline-controller
+spec:
+  selector:
+    app: pipeline-controller
+  ports:
+  - port: 8080
+    targetPort: 8080
+    nodePort: 30080
+  type: NodePort
