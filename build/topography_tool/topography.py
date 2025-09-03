@@ -1,34 +1,34 @@
 from flask import Flask, request, jsonify
-import subprocess
+from kubernetes import client, config
 import yaml
-import json
 from typing import Union, List, Dict
 
 app = Flask(__name__)
-IMAGE = "dami00/multicomponent_service"
-NAMESPACE = "default"
+
+# Inizializza la connessione al cluster
+config.load_incluster_config()  # se gira dentro Kubernetes
+v1 = client.CoreV1Api()
+apps_v1 = client.AppsV1Api()
+rbac_v1 = client.RbacAuthorizationV1Api()
+
 def flatten_steps(steps: List[Union[Dict, List]], start_id=0):
-    """
-    Trasforma lo schema JSON semplificato in una lista di step lineari
-    con id assegnati e collegamenti next_step calcolati.
-    """
+    """ Trasforma lo schema JSON semplificato in una lista lineare di step """
     flat = []
     current_id = start_id
 
     for idx, step in enumerate(steps):
         if isinstance(step, dict):
-            # Step singolo
             step_obj = {
                 "id": current_id,
                 "type": step["type"],
                 "params": step.get("params", {}),
-                "preferred_next": step.get("preferred_next")
+                "preferred_next": step.get("preferred_next"),
+                "needs_gpu": step.get("needs_gpu", False),
+                "volumes": step.get("volumes", [])
             }
 
-            # collegamento lineare di default
             if idx < len(steps) - 1:
                 if isinstance(steps[idx + 1], list):
-                    # biforcazione
                     next_ids = list(range(current_id + 1,
                                           current_id + 1 + len(steps[idx + 1])))
                 else:
@@ -39,159 +39,125 @@ def flatten_steps(steps: List[Union[Dict, List]], start_id=0):
             current_id += 1
 
         elif isinstance(step, list):
-            # Biforcazione → ogni ramo diventa un nuovo step
             for sub in step:
                 step_obj = {
                     "id": current_id,
                     "type": sub["type"],
-                    "params": sub.get("params", {})
+                    "params": sub.get("params", {}),
+                    "next_step": [],
+                    "needs_gpu": sub.get("needs_gpu", False),
+                    "volumes": sub.get("volumes", [])
                 }
-                # next_step verrà gestito dal ramo successivo (se c’è)
-                step_obj["next_step"] = []
                 flat.append(step_obj)
                 current_id += 1
 
     return flat
 
-def generate_configmaps(pipeline_json: Dict, namespace="default"):
-    steps = flatten_steps(pipeline_json["steps"])
-
-    configmaps = []
-    for step in steps:
-        cm = {
-            "apiVersion": "v1",
-            "kind": "ConfigMap",
-            "metadata": {
-                "name": f"pipeline-step-{step['id']}",
-                "namespace": namespace
-            },
-            "data": {
-                "PIPELINE_CONFIG": yaml.dump({
-                    "step_id": step["id"],
-                    "steps": [{
-                        "id": step["id"],
-                        "type": step["type"],
-                        "params": step["params"],
-                        **({"next_step": step["next_step"]} if "next_step" in step else {}),
-                        **({"preferred_next": step["preferred_next"]} if step.get("preferred_next") else {})
-                    }]
-                }, sort_keys=False)
-            }
-        }
-        configmaps.append(cm)
-
-    return configmaps
-    
-def generate_deployments_and_services(pipeline_json: Dict, namespace=NAMESPACE):
-    steps = flatten_steps(pipeline_json["steps"])
-
-    manifests = []
-
-    # Definizione volumi standard (se richiesti)
-    volume_defs = {
-        "cuda": {"name": "cuda-volume", "hostPath": {"path": "/usr/local/cuda", "type": "Directory"}},
-        "lib": {"name": "lib-volume", "hostPath": {"path": "/usr/lib/aarch64-linux-gnu", "type": "Directory"}},
-        "jetson-inference": {"name": "jetson-inference-volume", "hostPath": {"path": "/home/administrator/jetson-inference", "type": "Directory"}},
-    }
-
-    volume_mounts_defs = {
-        "cuda": {"name": "cuda-volume", "mountPath": "/usr/local/cuda"},
-        "lib": {"name": "lib-volume", "mountPath": "/usr/lib/aarch64-linux-gnu"},
-        "jetson-inference": {"name": "jetson-inference-volume", "mountPath": "/jetson-inference"},
-    }
-
-    for step in steps:
-        step_id = step["id"]
-        gpu_required = step.get("gpu", False)
-        volumes = step.get("volumes", [])
-
-        container = {
-            "name": f"nn-step-{step_id}",
-            "image": IMAGE,
-            "imagePullPolicy": "Always",
-            "ports": [{"containerPort": 5000}],
-            "envFrom": [{"configMapRef": {"name": f"pipeline-step-{step_id}"}}],
-        }
-
-        if gpu_required:
-            container["resources"] = {
-                "limits": {"nvidia.com/gpu.shared": 1}
-            }
-
-        if volumes:
-            container["volumeMounts"] = [volume_mounts_defs[v] for v in volumes]
-
-        dep = {
-            "apiVersion": "apps/v1",
-            "kind": "Deployment",
-            "metadata": {"name": f"nn-step-{step_id}", "namespace": namespace},
-            "spec": {
-                "replicas": 1,
-                "selector": {"matchLabels": {"app": f"nn-step-{step_id}"}},
-                "template": {
-                    "metadata": {"labels": {"app": f"nn-step-{step_id}"}},
-                    "spec": {
-                        "containers": [container],
-                        "volumes": [volume_defs[v] for v in volumes] if volumes else []
-                    },
-                },
-            },
-        }
-
-        svc = {
-            "apiVersion": "v1",
-            "kind": "Service",
-            "metadata": {"name": f"nn-step-{step_id}", "namespace": namespace},
-            "spec": {
-                "selector": {"app": f"nn-step-{step_id}"},
-                "ports": [{"protocol": "TCP", "port": 5000, "targetPort": 5000}],
-                "type": "ClusterIP",
-            },
-        }
-
-        manifests.append(dep)
-        manifests.append(svc)
-
-    return manifests
-
-
-def generate_rbac(namespace=NAMESPACE):
-    role = {
-        "apiVersion": "rbac.authorization.k8s.io/v1",
-        "kind": "Role",
-        "metadata": {"namespace": namespace, "name": "pod-reader"},
-        "rules": [
-            {"apiGroups": [""], "resources": ["pods"], "verbs": ["list", "get"]}
-        ],
-    }
-
-    rb = {
-        "apiVersion": "rbac.authorization.k8s.io/v1",
-        "kind": "RoleBinding",
-        "metadata": {"name": "pod-reader-binding", "namespace": namespace},
-        "subjects": [{"kind": "ServiceAccount", "name": "default", "namespace": namespace}],
-        "roleRef": {
-            "kind": "Role",
-            "name": "pod-reader",
-            "apiGroup": "rbac.authorization.k8s.io",
-        },
-    }
-
-    return [role, rb]
-    
-def apply_manifest(obj):
-    yaml_str = yaml.dump(obj, sort_keys=False)
-    proc = subprocess.run(
-        ["kubectl", "apply", "-f", "-"],
-        input=yaml_str.encode(),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE
+def create_configmap(step: Dict, namespace="default"):
+    name = f"pipeline-step-{step['id']}"
+    cm = client.V1ConfigMap(
+        metadata=client.V1ObjectMeta(name=name, namespace=namespace),
+        data={"PIPELINE_CONFIG": yaml.dump({
+            "step_id": step["id"],
+            "steps": [{
+                "id": step["id"],
+                "type": step["type"],
+                "params": step["params"],
+                **({"next_step": step["next_step"]} if "next_step" in step else {}),
+                **({"preferred_next": step["preferred_next"]} if step.get("preferred_next") else {})
+            }]
+        }, sort_keys=False)}
     )
-    if proc.returncode != 0:
-        return f"❌ {proc.stderr.decode()}"
-    else:
-        return f"✅ {proc.stdout.decode()}"
-        
+    try:
+        v1.create_namespaced_config_map(namespace, cm)
+    except client.exceptions.ApiException as e:
+        if e.status == 409:  # già esiste
+            v1.replace_namespaced_config_map(name, namespace, cm)
+        else:
+            raise
+    return name
+
+def create_deployment(step: Dict, image="dami00/multicomponent_service",
+                      namespace="default"):
+    name = f"nn-step-{step['id']}"
+    container = client.V1Container(
+        name="nn",
+        image=image,
+        image_pull_policy="Always",
+        env=[client.V1EnvVar(
+            name="POD_NAMESPACE",
+            value_from=client.V1EnvVarSource(
+                field_ref=client.V1ObjectFieldSelector(field_path="metadata.namespace")
+            )
+        )],
+        env_from=[client.V1EnvFromSource(
+            config_map_ref=client.V1ConfigMapEnvSource(name=f"pipeline-step-{step['id']}")
+        )],
+        ports=[client.V1ContainerPort(container_port=5000)]
+    )
+
+    # Risorse GPU se richieste
+    if step.get("needs_gpu"):
+        container.resources = client.V1ResourceRequirements(
+            limits={"nvidia.com/gpu.shared": "1"}
+        )
+
+    # Volumi se presenti
+    volume_mounts = []
+    volumes = []
+    for vol in step.get("volumes", []):
+        mount = client.V1VolumeMount(
+            name=vol["name"],
+            mount_path=vol["mountPath"]
+        )
+        volume_mounts.append(mount)
+        v = client.V1Volume(
+            name=vol["name"],
+            host_path=client.V1HostPathVolumeSource(path=vol["hostPath"])
+        )
+        volumes.append(v)
+    container.volume_mounts = volume_mounts
+
+    template = client.V1PodTemplateSpec(
+        metadata=client.V1ObjectMeta(labels={"app": "nn-service", "step": str(step["id"])}),
+        spec=client.V1PodSpec(containers=[container], volumes=volumes)
+    )
+
+    spec = client.V1DeploymentSpec(
+        replicas=1,
+        selector=client.V1LabelSelector(match_labels={"app": "nn-service", "step": str(step["id"])}),
+        template=template
+    )
+
+    deployment = client.V1Deployment(
+        metadata=client.V1ObjectMeta(name=name, namespace=namespace),
+        spec=spec
+    )
+
+    try:
+        apps_v1.create_namespaced_deployment(namespace, deployment)
+    except client.exceptions.ApiException as e:
+        if e.status == 409:
+            apps_v1.replace_namespaced_deployment(name, namespace, deployment)
+        else:
+            raise
+
+    # Crea anche un Service ClusterIP
+    service = client.V1Service(
+        metadata=client.V1ObjectMeta(name=name, namespace=namespace),
+        spec=client.V1ServiceSpec(
+            selector={"app": "nn-service", "step": str(step["id"])},
+            ports=[client.V1ServicePort(port=5000, target_port=5000)]
+        )
+    )
+    try:
+        v1.create_namespaced_service(namespace, service)
+    except client.exceptions.ApiException as e:
+        if e.status == 409:
+            v1.replace_namespaced_service(name, namespace, service)
+        else:
+            raise
+
 @app.route("/pipeline", methods=["POST"])
 def update_pipeline():
     try:
@@ -199,21 +165,16 @@ def update_pipeline():
         if not pipeline:
             return jsonify({"error": "Invalid JSON"}), 400
 
+        steps = flatten_steps(pipeline["steps"])
         results = []
 
-        # 1. ConfigMap
-        for cm in generate_configmaps(pipeline):
-            results.append(apply_manifest(cm))
-
-        # 2. Deployment + Service
-        for ms in generate_deployments_and_services(pipeline):
-            results.append(apply_manifest(ms))
-
-        # 3. RBAC
-        for rbac in generate_rbac():
-            results.append(apply_manifest(rbac))
+        for step in steps:
+            cm_name = create_configmap(step)
+            create_deployment(step)
+            results.append(f"Step {step['id']} applied with ConfigMap {cm_name}")
 
         return jsonify({"status": "ok", "results": results})
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
