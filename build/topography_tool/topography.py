@@ -47,7 +47,7 @@ def flatten_steps(steps: List[Union[Dict, List]], start_id=0):
 
 
 # --- YAML Builders ---
-def generate_configmap(step, pipeline_id, namespace="default"):
+def generate_configmap(step, all_steps, pipeline_id, namespace="default"):
     return client.V1ConfigMap(
         api_version="v1",
         kind="ConfigMap",
@@ -58,14 +58,9 @@ def generate_configmap(step, pipeline_id, namespace="default"):
         ),
         data={
             "PIPELINE_CONFIG": yaml.dump({
+                "pipeline_id": pipeline_id,
                 "step_id": step["id"],
-                "steps": [{
-                    "id": step["id"],
-                    "type": step["type"],
-                    "params": step["params"],
-                    **({"next_step": step["next_step"]} if "next_step" in step else {}),
-                    **({"preferred_next": step["preferred_next"]} if step.get("preferred_next") else {})
-                }]
+                "steps": all_steps  
             }, sort_keys=False)
         }
     )
@@ -179,7 +174,7 @@ def create_pipeline():
         results = []
 
         for step in steps:
-            cm = generate_configmap(step, pipeline_id)
+            cm = generate_configmap(step, steps, pipeline_id)
             dep = generate_deployments(step, pipeline_id)
             svc = generate_service(step, pipeline_id)
 
