@@ -181,7 +181,7 @@ def create_pipeline():
 
         for step in steps:
             cm = generate_configmap(step, pipeline_id)
-            dep = generate_deployment(step, pipeline_id)
+            dep = generate_deployments(step, pipeline_id)
             svc = generate_service(step, pipeline_id)
 
             v1.create_namespaced_config_map(namespace="default", body=cm)
