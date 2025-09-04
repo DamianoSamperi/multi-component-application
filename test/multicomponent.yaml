@@ -39,7 +39,7 @@ spec:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: ppipeline-step-0  
+  name: pipeline-step-0  
   namespace: default
   labels:
     pipeline_id: pipeline-1234abcd 
