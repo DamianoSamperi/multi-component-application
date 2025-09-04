@@ -45,6 +45,7 @@ metadata:
     pipeline_id: pipeline-1234abcd 
 data:
   PIPELINE_CONFIG: |
+    pipeline_id: pipeline-1234abcd
     step_id: 0
     steps:
       - id: 0
@@ -64,6 +65,7 @@ metadata:
     pipeline_id: pipeline-1234abcd 
 data:
   PIPELINE_CONFIG: |
+    pipeline_id: pipeline-1234abcd
     step_id: 1
     steps:
       - id: 1
@@ -82,6 +84,7 @@ metadata:
     pipeline_id: pipeline-1234abcd 
 data:
   PIPELINE_CONFIG: |
+    pipeline_id: pipeline-1234abcd
     step_id: 2
     steps:
       - id: 2
@@ -97,6 +100,7 @@ metadata:
     pipeline_id: pipeline-1234abcd 
 data:
   PIPELINE_CONFIG: |
+    pipeline_id: pipeline-1234abcd
     step_id: 3
     steps:
       - id: 3
