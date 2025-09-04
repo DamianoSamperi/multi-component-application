@@ -163,25 +163,32 @@ def create_pipeline():
         apps_v1 = client.AppsV1Api()
 
         pipeline_id = f"pipeline-{uuid.uuid4().hex[:8]}"
-
         steps = flatten_steps(pipeline["steps"])
         results = []
 
+        # --- Creazione ConfigMap ---
         for step in steps:
             cm = generate_configmap(step, steps, pipeline_id)
-            dep = generate_deployments([step], pipeline_id)
-            svc = generate_services([step], pipeline_id)
-
-
             v1.create_namespaced_config_map(namespace="default", body=cm)
-            apps_v1.create_namespaced_deployment(namespace="default", body=dep)
-            v1.create_namespaced_service(namespace="default", body=svc)
+            results.append(f"✅ ConfigMap creata per step {step['id']}")
 
-            results.append(f"✅ Creati step {step['id']}")
+        # --- Creazione Deployment ---
+        deployments = generate_deployments(steps, pipeline_id)
+        for dep in deployments:
+            apps_v1.create_namespaced_deployment(namespace="default", body=dep)
+            results.append(f"✅ Deployment creato per {dep['metadata']['name']}")
+
+        # --- Creazione Service ---
+        services = generate_services(steps, pipeline_id)
+        for svc in services:
+            v1.create_namespaced_service(namespace="default", body=svc)
+            results.append(f"✅ Service creato per {svc['metadata']['name']}")
 
         return jsonify({"status": "ok", "pipeline_id": pipeline_id, "results": results})
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 
 @app.route("/pipeline/<pipeline_id>", methods=["DELETE"])
