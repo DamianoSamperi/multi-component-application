@@ -6,45 +6,64 @@ from typing import Union, List, Dict
 
 app = Flask(__name__)
 
-# --- Flatten Steps ---
+from typing import Union, List, Dict
+
 def flatten_steps(steps: List[Union[Dict, List]], start_id=0):
     """
-    Trasforma lo schema JSON semplificato in lista di step con id e next_step.
+    Trasforma uno schema JSON semplificato (con possibili liste annidate) in lista piatta di step
+    con id, next_step e preferred_next.
     """
     flat = []
     current_id = start_id
 
-    for idx, step in enumerate(steps):
-        if isinstance(step, dict):
-            step_obj = {
-                "id": current_id,
-                "type": step["type"],
-                "params": step.get("params", {}),
-                "gpu": step.get("gpu", False),
-                "volumes": step.get("volumes", []),
-                "preferred_next": step.get("preferred_next")
-            }
-            if idx < len(steps) - 1:
-                if isinstance(steps[idx + 1], list):
-                    next_ids = list(range(current_id + 1, current_id + 1 + len(steps[idx + 1])))
-                else:
-                    next_ids = [current_id + 1]
-                step_obj["next_step"] = next_ids
-            flat.append(step_obj)
-            current_id += 1
-        elif isinstance(step, list):
-            for sub in step:
+    def _flatten(substeps, current_id):
+        local_flat = []
+        ids_mapping = {}  # mappa posizione originale → id
+
+        for idx, step in enumerate(substeps):
+            if isinstance(step, dict):
+                step_id = current_id
                 step_obj = {
-                    "id": current_id,
-                    "type": sub["type"],
-                    "params": sub.get("params", {}),
-                    "gpu": sub.get("gpu", False),
-                    "volumes": sub.get("volumes", [])
+                    "id": step_id,
+                    "type": step["type"],
+                    "params": step.get("params", {}),
+                    "gpu": step.get("gpu", False),
+                    "volumes": step.get("volumes", []),
+                    "preferred_next": step.get("preferred_next")
                 }
-                step_obj["next_step"] = []
-                flat.append(step_obj)
+                local_flat.append(step_obj)
+                ids_mapping[idx] = step_id
                 current_id += 1
+            elif isinstance(step, list):
+                # ricorsione per sub-list
+                sub_flat, sub_ids, current_id = _flatten(step, current_id)
+                local_flat.extend(sub_flat)
+                # mappa sub-list alla posizione idx
+                ids_mapping[idx] = list(sub_ids.values())
+
+        # assegna next_step
+        for idx, step in enumerate(substeps):
+            step_obj = local_flat[ids_mapping[idx] if isinstance(ids_mapping[idx], int) else ids_mapping[idx][0]]
+            if isinstance(step, dict) and "next_step" not in step_obj:
+                # se non è l’ultimo step del livello, punta al prossimo
+                if idx < len(substeps) - 1:
+                    next_idx = substeps[idx + 1]
+                    step_obj["next_step"] = ids_mapping[idx + 1] if isinstance(ids_mapping[idx + 1], int) else ids_mapping[idx + 1]
+                else:
+                    step_obj["next_step"] = []
+            elif isinstance(step, list):
+                # primo step della sub-list punta al primo id della lista
+                first_id = ids_mapping[idx][0]
+                if idx > 0:
+                    prev_step = local_flat[ids_mapping[idx - 1] if isinstance(ids_mapping[idx - 1], int) else ids_mapping[idx - 1][-1]]
+                    if "next_step" not in prev_step or prev_step["next_step"] == []:
+                        prev_step["next_step"] = first_id
+
+        return local_flat, ids_mapping, current_id
+
+    flat, _, _ = _flatten(steps, current_id)
     return flat
+
 
 
 # --- YAML Builders ---
