@@ -14,15 +14,15 @@ from steps.deblur import Deblur
 
 app = Flask(__name__)
 
+# --- Lettura config pipeline da env ---
+pipeline_yaml = os.getenv("PIPELINE_CONFIG", '{"steps":[]}')
+config = yaml.safe_load(pipeline_yaml)
+
 # --- Config ---
 NAMESPACE = os.getenv("POD_NAMESPACE", "default")
 SERVICE_PORT = os.getenv("SERVICE_PORT", "5000")
 APP_LABEL = os.getenv("APP_LABEL", "nn-service")
-PIPELINE_ID = os.getenv("PIPELINE_ID", "default-pipeline")  # 👈 nuovo: identifica la pipeline
-
-# --- Lettura config pipeline da env ---
-pipeline_yaml = os.getenv("PIPELINE_CONFIG", '{"steps":[]}')
-config = yaml.safe_load(pipeline_yaml)
+PIPELINE_ID = config.get("pipeline_id") 
 
 # --- Step corrente ---
 STEP_ID = int(config.get("step_id", 0))
