@@ -10,40 +10,34 @@ def flatten_steps(steps: List[Union[Dict, List]], start_id=0):
     flat = []
     current_id = start_id
 
-    def _flatten(substeps, current_id):
-        local_flat = []
-        step_ids = []  # lista di ID dei substeps
+    for step in steps:
+        if isinstance(step, dict):
+            step_obj = {
+                "id": current_id,
+                "type": step["type"],
+                "params": step.get("params", {}),
+                "gpu": step.get("gpu", False),
+                "volumes": step.get("volumes", []),
+                "preferred_next": step.get("preferred_next"),
+                "next_step": []
+            }
+            flat.append(step_obj)
+            current_id += 1
+        elif isinstance(step, list):
+            sub_flat = flatten_steps(step, start_id=current_id)
+            # next_step del step precedente punta al primo sub-step
+            if flat:
+                flat[-1]["next_step"] = [sub_flat[0]["id"]]
+            flat.extend(sub_flat)
+            current_id = flat[-1]["id"] + 1
 
-        for step in substeps:
-            if isinstance(step, dict):
-                step_obj = {
-                    "id": current_id,
-                    "type": step["type"],
-                    "params": step.get("params", {}),
-                    "gpu": step.get("gpu", False),
-                    "volumes": step.get("volumes", []),
-                    "preferred_next": step.get("preferred_next"),
-                    "next_step": []
-                }
-                local_flat.append(step_obj)
-                step_ids.append(current_id)
-                current_id += 1
-            elif isinstance(step, list):
-                # flatten ricorsivo della sub-list
-                sub_flat, sub_ids, current_id = _flatten(step, current_id)
-                local_flat.extend(sub_flat)
-                step_ids.extend(sub_ids)
+    # assegna next_step tra gli step principali
+    for i in range(len(flat) - 1):
+        if not flat[i]["next_step"]:
+            flat[i]["next_step"] = [flat[i + 1]["id"]]
 
-        # assegna next_step
-        for idx, step in enumerate(local_flat):
-            # se non è l'ultimo, next_step punta al prossimo step
-            if idx < len(local_flat) - 1:
-                step["next_step"] = [local_flat[idx + 1]["id"]]
-
-        return local_flat, step_ids, current_id
-
-    flat, _, _ = _flatten(steps, current_id)
     return flat
+
 
 
 # --- YAML Builders ---
@@ -175,8 +169,9 @@ def create_pipeline():
 
         for step in steps:
             cm = generate_configmap(step, steps, pipeline_id)
-            dep = generate_deployments(step, pipeline_id)
-            svc = generate_service(step, pipeline_id)
+            dep = generate_deployments([step], pipeline_id)
+            svc = generate_services([step], pipeline_id)
+
 
             v1.create_namespaced_config_map(namespace="default", body=cm)
             apps_v1.create_namespaced_deployment(namespace="default", body=dep)
