@@ -135,8 +135,6 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        - name: PIPELINE_ID
-          value: 1
         ports:
         - containerPort: 5000
         resources:
@@ -188,8 +186,6 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        - name: PIPELINE_ID
-          value: 1
         ports:
         - containerPort: 5000
         resources:
@@ -286,8 +282,6 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        - name: PIPELINE_ID
-          value: 1
         ports:
         - containerPort: 5000
         resources:
@@ -339,8 +333,6 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        - name: PIPELINE_ID
-          value: 1
         ports:
         - containerPort: 5000
         resources:
