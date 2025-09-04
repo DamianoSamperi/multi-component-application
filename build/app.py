@@ -22,7 +22,7 @@ config = yaml.safe_load(pipeline_yaml)
 NAMESPACE = os.getenv("POD_NAMESPACE", "default")
 SERVICE_PORT = os.getenv("SERVICE_PORT", "5000")
 APP_LABEL = os.getenv("APP_LABEL", "nn-service")
-PIPELINE_ID = config.get("pipeline_id") 
+PIPELINE_ID = config.get("pipeline_id")  # viene letto dalla ConfigMap
 
 # --- Step corrente ---
 STEP_ID = int(config.get("step_id", 0))
@@ -68,25 +68,30 @@ def process():
         output.seek(0)
         return output.read(), 200, {"Content-Type": "image/jpeg"}
 
-    if isinstance(next_steps, str) or isinstance(next_steps, int):
+    if isinstance(next_steps, (str, int)):
         next_steps = [next_steps]
 
-    # 3️⃣ Carica config Kubernetes e verifica pod attivi SOLO di questa pipeline
+    # 3️⃣ Carica config Kubernetes e verifica ConfigMap della pipeline
     try:
         k8s_config.load_incluster_config()
         v1 = client.CoreV1Api()
-        label_selector = f"app={APP_LABEL},pipeline_id={PIPELINE_ID}"
-        pods = v1.list_namespaced_pod(namespace=NAMESPACE, label_selector=label_selector)
+        # Lista tutte le ConfigMap della pipeline
+        configmaps = v1.list_namespaced_config_map(
+            namespace=NAMESPACE,
+            label_selector=f"pipeline_id={PIPELINE_ID}"
+        )
     except Exception as e:
         return jsonify({"error": f"Errore API Kubernetes: {e}"}), 500
 
     active_steps = set()
-    for pod in pods.items:
-        step_label = pod.metadata.labels.get("step")
-        if step_label:
-            active_steps.add(str(step_label))
+    for cm in configmaps.items:
+        # Ricava lo step_id dalla ConfigMap
+        cm_data = yaml.safe_load(cm.data.get("PIPELINE_CONFIG", "{}"))
+        step_id = cm_data.get("step_id")
+        if step_id is not None:
+            active_steps.add(str(step_id))
 
-    # 4️⃣ Filtra i prossimi step in base ai pod attivi
+    # 4️⃣ Filtra i prossimi step in base alle ConfigMap attive
     available_next = [s for s in next_steps if str(s) in active_steps]
 
     if not available_next:
@@ -94,11 +99,9 @@ def process():
 
     # --- Logica di selezione ---
     preferred = current_step_conf.get("preferred_next")
-
     if preferred and str(preferred) in available_next:
         chosen_next = preferred
     else:
-        # fallback → prendi il primo disponibile
         chosen_next = sorted(available_next)[0]
 
     # 5️⃣ Costruisci URL per il prossimo step (scoped alla pipeline)
