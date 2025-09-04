@@ -39,7 +39,7 @@ spec:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: pipeline-1234abcd-step-0   
+  name: ppipeline-step-0  
   namespace: default
   labels:
     pipeline_id: pipeline-1234abcd 
@@ -58,7 +58,7 @@ data:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: pipeline-1234abcd-step-1   # il nome deve essere univoco
+  name: pipeline-step-1   # il nome deve essere univoco
   namespace: default
   labels:
     pipeline_id: pipeline-1234abcd 
@@ -76,7 +76,7 @@ data:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: pipeline-1234abcd-step-2   # il nome deve essere univoco
+  name: pipeline-step-2   # il nome deve essere univoco
   namespace: default
   labels:
     pipeline_id: pipeline-1234abcd 
@@ -91,7 +91,7 @@ data:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: pipeline-1234abcd-step-3   # il nome deve essere univoco
+  name: pipeline-step-3   # il nome deve essere univoco
   namespace: default
   labels:
     pipeline_id: pipeline-1234abcd 
