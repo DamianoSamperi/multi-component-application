@@ -42,7 +42,37 @@ def flatten_steps(steps: List[Union[Dict, List]], start_id=0):
 
 # --- YAML Builders ---
 def generate_configmap(step, pipeline_id, namespace="default"):
-    return client.V1ConfigMap(
+    # Costruisco lo step che deve andare dentro "steps"
+    step_config = {
+        "id": step["id"],
+        "type": step["type"],
+        "params": step.get("params", {}),
+        "gpu": step.get("gpu", False),
+        "volumes": step.get("volumes", []),
+        "preferred_next": step.get("preferred_next"),
+        "next_step": step.get("next_step", []),
+    }
+    # Struttura della configmap
+    config_data = {
+        "pipeline_id": pipeline_id,
+        "step_id": step["id"],
+        "steps": [step_config],
+    }
+    cm = {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "metadata": {
+            "name": f"{pipeline_id}-step-{step['id']}",
+            "namespace": namespace,
+            "labels": {"pipeline_id": pipeline_id},
+        },
+        "data": {
+            "PIPELINE_CONFIG": yaml.dump(config_data, default_flow_style=False)
+        },
+    }
+
+    return cm
+    """return client.V1ConfigMap(
         api_version="v1",
         kind="ConfigMap",
         metadata=client.V1ObjectMeta(
@@ -62,7 +92,7 @@ def generate_configmap(step, pipeline_id, namespace="default"):
                 "next_step": step.get("next_step", []),
             }, sort_keys=False)
         }
-    )
+    )"""
 
 
 def generate_deployments(steps: List[Dict], pipeline_prefix: str, namespace="default") -> List[Dict]:
