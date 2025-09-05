@@ -141,7 +141,7 @@ def generate_deployments(steps: List[Dict], pipeline_prefix: str, namespace="def
         deployment = {
             "apiVersion": "apps/v1",
             "kind": "Deployment",
-            "metadata": {"name": deployment_name, "namespace": namespace},
+            "metadata": {"name": deployment_name, "namespace": namespace,"labels":{"pipeline_id": pipeline_prefix}},
             "spec": {
                 "replicas": 1,
                 "selector": {"matchLabels": {"app": "nn-service", "step": str(step_id), "pipeline_id": pipeline_prefix}},
@@ -242,18 +242,7 @@ def delete_pipeline(pipeline_id):
 
         # Cancella tutto con label pipeline_id
         # apps_v1.delete_collection_namespaced_deployment(namespace="default", label_selector=f"pipeline_id={pipeline_id}", body=delete_opts)
-        # 1. Lista dei deployment con label pipeline_id
-        deps = apps_v1.list_namespaced_deployment(
-            namespace="default",
-            label_selector=f"pipeline_id={pipeline_id}"
-        )
-        # 2. Cancella ogni deployment singolarmente
-        for dep in deps.items:
-            apps_v1.delete_namespaced_deployment(
-                name=dep.metadata.name,
-                namespace="default",
-                body=delete_opts
-            )
+        apps_v1.delete_collection_namespaced_deployment(namespace="default",label_selector=f"pipeline_id={pipeline_id},app=nn-service")
         v1.delete_collection_namespaced_config_map(namespace="default", label_selector=f"pipeline_id={pipeline_id}", body=delete_opts)
         v1.delete_collection_namespaced_service(namespace="default", label_selector=f"pipeline_id={pipeline_id}", body=delete_opts)
 
