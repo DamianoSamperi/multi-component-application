@@ -116,7 +116,7 @@ def generate_deployments(steps: List[Dict], pipeline_prefix: str, namespace="def
                 "replicas": 1,
                 "selector": {"matchLabels": {"app": "nn-service", "step": str(step_id)}},
                 "template": {
-                    "metadata": {"labels": {"app": "nn-service", "step": str(step_id),"pipeline_id": pipeline_id}},
+                    "metadata": {"labels": {"app": "nn-service", "step": str(step_id),"pipeline_id": pipeline_prefix}},
                     "spec": {
                         "containers": [container],
                         "volumes": volumes if volumes else []
@@ -149,7 +149,7 @@ def generate_services(steps: List[Dict], pipeline_prefix: str, namespace="defaul
         service = {
             "apiVersion": "v1",
             "kind": "Service",
-            "metadata": {"name": service_name, "namespace": namespace,"labels":{"pipeline_id": pipeline_id}},
+            "metadata": {"name": service_name, "namespace": namespace,"labels":{"pipeline_id": pipeline_prefix}},
             "spec": spec,
         }
 
