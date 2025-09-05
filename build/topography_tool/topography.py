@@ -242,7 +242,7 @@ def delete_pipeline(pipeline_id):
 
         # Cancella tutto con label pipeline_id
         # apps_v1.delete_collection_namespaced_deployment(namespace="default", label_selector=f"pipeline_id={pipeline_id}", body=delete_opts)
-        apps_v1.delete_collection_namespaced_deployment(namespace="default",label_selector=f"pipeline_id={pipeline_id},app=nn-service")
+        apps_v1.delete_collection_namespaced_deployment(namespace="default",label_selector=f"pipeline_id={pipeline_id},body=delete_opts)
         v1.delete_collection_namespaced_config_map(namespace="default", label_selector=f"pipeline_id={pipeline_id}", body=delete_opts)
         v1.delete_collection_namespaced_service(namespace="default", label_selector=f"pipeline_id={pipeline_id}", body=delete_opts)
 
