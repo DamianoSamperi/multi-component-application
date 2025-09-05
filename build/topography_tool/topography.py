@@ -41,7 +41,7 @@ def flatten_steps(steps: List[Union[Dict, List]], start_id=0):
 
 
 # --- YAML Builders ---
-def generate_configmap(step, all_steps, pipeline_id, namespace="default"):
+def generate_configmap(step, pipeline_id, namespace="default"):
     return client.V1ConfigMap(
         api_version="v1",
         kind="ConfigMap",
@@ -54,10 +54,16 @@ def generate_configmap(step, all_steps, pipeline_id, namespace="default"):
             "PIPELINE_CONFIG": yaml.dump({
                 "pipeline_id": pipeline_id,
                 "step_id": step["id"],
-                "steps": all_steps  
+                "type": step["type"],
+                "params": step.get("params", {}),
+                "gpu": step.get("gpu", False),
+                "volumes": step.get("volumes", []),
+                "preferred_next": step.get("preferred_next"),
+                "next_step": step.get("next_step", []),
             }, sort_keys=False)
         }
     )
+
 
 def generate_deployments(steps: List[Dict], pipeline_prefix: str, namespace="default") -> List[Dict]:
     """
@@ -110,7 +116,7 @@ def generate_deployments(steps: List[Dict], pipeline_prefix: str, namespace="def
                 "replicas": 1,
                 "selector": {"matchLabels": {"app": "nn-service", "step": str(step_id)}},
                 "template": {
-                    "metadata": {"labels": {"app": "nn-service", "step": str(step_id)}},
+                    "metadata": {"labels": {"app": "nn-service", "step": str(step_id),"pipeline_id": pipeline_id}},
                     "spec": {
                         "containers": [container],
                         "volumes": volumes if volumes else []
@@ -137,7 +143,7 @@ def generate_services(steps: List[Dict], pipeline_prefix: str, namespace="defaul
         service = {
             "apiVersion": "v1",
             "kind": "Service",
-            "metadata": {"name": service_name, "namespace": namespace},
+            "metadata": {"name": service_name, "namespace": namespace,"labels":{"pipeline_id": pipeline_id}},
             "spec": {
                 "selector": {"app": "nn-service", "step": str(step_id)},
                 "ports": [{"port": 5000, "targetPort": 5000}],
@@ -165,12 +171,13 @@ def create_pipeline():
         pipeline_id = f"pipeline-{uuid.uuid4().hex[:8]}"
         steps = flatten_steps(pipeline["steps"])
         results = []
-
+        
         # --- Creazione ConfigMap ---
         for step in steps:
-            cm = generate_configmap(step, steps, pipeline_id)
+            cm = generate_configmap(step, pipeline_id)   # <-- passi solo step e pipeline_id
             v1.create_namespaced_config_map(namespace="default", body=cm)
             results.append(f"✅ ConfigMap creata per step {step['id']}")
+
 
         # --- Creazione Deployment ---
         deployments = generate_deployments(steps, pipeline_id)
