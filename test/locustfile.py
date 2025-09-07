@@ -1,44 +1,33 @@
 import subprocess
+import requests
 from locust import HttpUser, task, between
 
-def discover_entrypoints():
-    """Trova tutti i servizi pipeline-*-step-0 e ritorna i loro endpoint HTTP"""
+# -------- Ricerca entrypoint --------
+def get_pipeline_entrypoints():
+    result = subprocess.run(
+        ["kubectl", "get", "svc", "-o", "jsonpath={range .items[*]}{.metadata.name} {.status.loadBalancer.ingress[0].ip} {.spec.ports[0].port}{\"\\n\"}{end}"],
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+
     entrypoints = []
-
-    try:
-        # Estrai nome svc, clusterIP, externalIP e porta
-        svc_list = subprocess.check_output(
-            [
-                "kubectl", "get", "svc",
-                "-o", "jsonpath={range .items[*]}{.metadata.name} {.spec.clusterIP} {.status.loadBalancer.ingress[0].ip} {.spec.ports[0].port}\n{end}"
-            ],
-            text=True
-        ).splitlines()
-
-        for svc in svc_list:
-            parts = svc.split()
-            if len(parts) < 4:
-                continue
-            name, cluster_ip, external_ip, port = parts[0], parts[1], parts[2], parts[3]
-
-            if name.endswith("step-0"):  # solo entrypoint pipeline
-                target_ip = external_ip if external_ip and external_ip != "<none>" else cluster_ip
-                url = f"http://{target_ip}:{port}/process"
-                entrypoints.append((name, url))
-
-    except Exception as e:
-        print("Errore nel recupero dei servizi:", e)
+    for line in result.stdout.splitlines():
+        parts = line.split()
+        if len(parts) == 3:
+            name, ip, port = parts
+            if name.endswith("step-0") and ip != "<none>":
+                entrypoints.append((name, f"http://{ip}:{port}/process"))
 
     return entrypoints
 
-
-ENTRYPOINTS = discover_entrypoints()
+ENTRYPOINTS = get_pipeline_entrypoints()
 print("Entrypoints trovati:", ENTRYPOINTS)
 
 
+# -------- Classe utente Locust --------
 class PipelineUser(HttpUser):
     wait_time = between(1, 3)
-    host = "http://dummy"
+    host = "http://dummy"  # richiesto da Locust ma non usato
 
     @task
     def send_to_all_pipelines(self):
@@ -51,9 +40,12 @@ class PipelineUser(HttpUser):
         for name, url in ENTRYPOINTS:
             with open(image_file, "rb") as f:
                 files = {"image": (image_file, f, "image/jpeg")}
-                response = self.client.post(url, files=files, name=name)  # `name` serve a separare le stats in Locust
+                response = self.client.post(url, files=files, name=name)
 
                 if response.status_code == 200:
-                    print(f"[OK] {name} ({url})")
+                    output_filename = f"output_{name}.jpg"
+                    with open(output_filename, "wb") as out:
+                        out.write(response.content)
+                    print(f"[OK] Risultato salvato in {output_filename}")
                 else:
                     print(f"[ERR {response.status_code}] {name} ({url}): {response.text}")
