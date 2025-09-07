@@ -137,7 +137,23 @@ def generate_deployments(steps: List[Dict], pipeline_prefix: str, namespace="def
 
         if volume_mounts:
             container["volumeMounts"] = volume_mounts
+        # NodeSelector
+        node_selector = step.get("nodeSelector")
 
+        deployment_spec = {
+            "replicas": 1,
+            "selector": {"matchLabels": {"app": "nn-service", "step": str(step_id), "pipeline_id": pipeline_prefix}},
+            "template": {
+                "metadata": {"labels": {"app": "nn-service", "step": str(step_id), "pipeline_id": pipeline_prefix}},
+                "spec": {
+                    "containers": [container],
+                    "volumes": volumes if volumes else [],
+                },
+            },
+        }
+
+        if node_selector:
+            deployment_spec["template"]["spec"]["nodeSelector"] = node_selector
         deployment = {
             "apiVersion": "apps/v1",
             "kind": "Deployment",
@@ -147,12 +163,7 @@ def generate_deployments(steps: List[Dict], pipeline_prefix: str, namespace="def
                 "selector": {"matchLabels": {"app": "nn-service", "step": str(step_id), "pipeline_id": pipeline_prefix}},
                 "template": {
                     "metadata": {"labels": {"app": "nn-service", "step": str(step_id),"pipeline_id": pipeline_prefix}},
-                    "spec": {
-                        "containers": [container],
-                        "volumes": volumes if volumes else []
-                    },
-                },
-            },
+                    "spec": deployment_spec,
         }
 
         deployments.append(deployment)
