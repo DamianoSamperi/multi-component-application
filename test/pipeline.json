@@ -8,6 +8,7 @@
         "tta": false
       },
       "gpu": true,
+      "nodeSelector": {"kubernetes.io/hostname": "nano93"},
       "volumes": ["cuda", "lib"]
     },
     {
@@ -18,6 +19,7 @@
       },
       "preferred_next": 2,
       "gpu": true,
+      "nodeSelector": {"kubernetes.io/hostname": "nano92"},
       "volumes": ["cuda", "lib", "jetson-inference"]
     },
     [
@@ -25,6 +27,7 @@
         "type": "grayscale",
         "params": {},
         "gpu": true,
+        "nodeSelector": {"kubernetes.io/hostname": "nano93"},
         "volumes": ["cuda", "lib"]
       },
       {
@@ -33,6 +36,7 @@
           "radius": 2
         },
         "gpu": true,
+        "nodeSelector": {"kubernetes.io/hostname": "nano94"},
         "volumes": ["cuda", "lib"]
       }
     ]
