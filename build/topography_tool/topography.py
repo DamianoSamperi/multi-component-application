@@ -19,7 +19,8 @@ def flatten_steps(steps: List[Union[Dict, List]], start_id=0):
                 "gpu": step.get("gpu", False),
                 "volumes": step.get("volumes", []),
                 "preferred_next": step.get("preferred_next"),
-                "next_step": []
+                "next_step": [],
+                "nodeSelector": step.get("nodeSelector")
             }
             flat.append(step_obj)
             current_id += 1
