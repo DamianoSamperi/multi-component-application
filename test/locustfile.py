@@ -1,5 +1,4 @@
 import subprocess
-import requests
 from locust import HttpUser, task, between
 
 # -------- Ricerca entrypoint --------
@@ -27,7 +26,7 @@ print("Entrypoints trovati:", ENTRYPOINTS)
 # -------- Classe utente Locust --------
 class PipelineUser(HttpUser):
     wait_time = between(1, 3)
-    host = "http://dummy"  # richiesto da Locust ma non usato
+    host = "http://pipelines"  # host fittizio richiesto da Locust
 
     @task
     def send_to_all_pipelines(self):
@@ -40,12 +39,17 @@ class PipelineUser(HttpUser):
         for name, url in ENTRYPOINTS:
             with open(image_file, "rb") as f:
                 files = {"image": (image_file, f, "image/jpeg")}
-                response = self.client.post(url, files=files, name=name)
-
-                if response.status_code == 200:
-                    output_filename = f"output_{name}.jpg"
-                    with open(output_filename, "wb") as out:
-                        out.write(response.content)
-                    print(f"[OK] Risultato salvato in {output_filename}")
-                else:
-                    print(f"[ERR {response.status_code}] {name} ({url}): {response.text}")
+                # usiamo request_name=name per distinguere le pipeline
+                with self.client.post(
+                    url,
+                    files=files,
+                    name=name,  # così Locust raggruppa per pipeline
+                    catch_response=True
+                ) as response:
+                    if response.status_code == 200:
+                        output_filename = f"output_{name}.jpg"
+                        with open(output_filename, "wb") as out:
+                            out.write(response.content)
+                        response.success()
+                    else:
+                        response.failure(f"Errore {response.status_code}: {response.text}")
