@@ -38,6 +38,7 @@ print("Entrypoints trovati:", ENTRYPOINTS)
 
 class PipelineUser(HttpUser):
     wait_time = between(1, 3)
+    host = "http://dummy"
 
     @task
     def send_to_all_pipelines(self):
