@@ -21,7 +21,7 @@ print("Entrypoints trovati:", ENTRYPOINTS)
 
 class PipelineUser(HttpUser):
     wait_time = between(1, 3)
-    host = "http://dummy"  # richiesto da Locust, ma lo sovrascriviamo dopo
+    host = "http://dummy"
 
     @task
     def send_to_all(self):
@@ -29,16 +29,21 @@ class PipelineUser(HttpUser):
             return
         image_file = "your_image.jpg"
         for name, base_url in ENTRYPOINTS:
-            self.client.base_url = base_url  # 👈 cambia host per questa request
+            self.client.base_url = base_url
             with open(image_file, "rb") as f:
                 files = {"image": (image_file, f, "image/jpeg")}
                 with self.client.post(
                     "/process",
                     files=files,
-                    name=name,   # 👈 così Locust raggruppa per pipeline
+                    name=name,
                     catch_response=True
                 ) as resp:
                     if resp.status_code == 200:
+                        # 🔹 Estrai tempi degli step dagli header
+                        step_times = {
+                            k: v for k, v in resp.headers.items() if k.startswith("X-Step-")
+                        }
+                        print(f"[{name}] Tempi per step:", step_times)
                         resp.success()
                     else:
                         resp.failure(f"Errore {resp.status_code}")
