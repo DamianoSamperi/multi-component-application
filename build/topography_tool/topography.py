@@ -158,12 +158,7 @@ def generate_deployments(steps: List[Dict], pipeline_prefix: str, namespace="def
             "apiVersion": "apps/v1",
             "kind": "Deployment",
             "metadata": {"name": deployment_name, "namespace": namespace,"labels":{"pipeline_id": pipeline_prefix}},
-            "spec": {
-                "replicas": 1,
-                "selector": {"matchLabels": {"app": "nn-service", "step": str(step_id), "pipeline_id": pipeline_prefix}},
-                "template": {
-                    "metadata": {"labels": {"app": "nn-service", "step": str(step_id),"pipeline_id": pipeline_prefix}},
-                    "spec": deployment_spec,
+            "spec": deployment_spec,
         }
 
         deployments.append(deployment)
