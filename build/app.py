@@ -2,6 +2,7 @@ import os
 import yaml
 import io
 import requests
+import time
 from flask import Flask, request, jsonify
 from PIL import Image
 from kubernetes import client, config as k8s_config
@@ -55,6 +56,15 @@ def process():
     image_file = request.files["image"]
     image = Image.open(image_file).convert("RGB")
 
+    # ⏱️ misura tempo step
+    start_time = time.time()
+    for step in pipeline:
+        image = step.run(image)
+    elapsed = time.time() - start_time
+    
+    # Header custom con il tempo di questo step
+    step_header = {f"X-Step-{STEP_ID}-Time": str(elapsed)}
+    
     # 1️⃣ Applica il processing di questo step
     for step in pipeline:
         image = step.run(image)
@@ -66,7 +76,8 @@ def process():
         output = io.BytesIO()
         image.save(output, format="JPEG")
         output.seek(0)
-        return output.read(), 200, {"Content-Type": "image/jpeg"}
+        headers = {"Content-Type": "image/jpeg", **step_header}
+        return output.read(), 200, headers
 
     if isinstance(next_steps, (str, int)):
         next_steps = [next_steps]
@@ -117,7 +128,12 @@ def process():
 
     try:
         r = requests.post(next_url, files=files)
-        return r.content, r.status_code, r.headers.items()
+        # Unisci gli header di risposta con il tempo dello step corrente
+        combined_headers = dict(r.headers)
+        combined_headers.update(step_header)
+        
+        #return r.content, r.status_code, r.headers.items()
+        return r.content, r.status_code, combined_headers.items()
     except Exception as e:
         return jsonify({"error": f"Errore invio a step {chosen_next}: {e}"}), 500    
 
