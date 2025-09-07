@@ -115,18 +115,12 @@ def process():
     buf.seek(0)
     files = {"image": ("frame.jpg", buf, "image/jpeg")}
 
-    #try:
-    #    r = requests.post(next_url, files=files)
-    #    return r.content, r.status_code, r.headers.items()
-    #except Exception as e:
-    #    return jsonify({"error": f"Errore invio a step {chosen_next}: {e}"}), 500    
     try:
-        # Chiamata sincrona al prossimo step
-        r = requests.post(next_url, files=files, timeout=600)  # timeout lungo se pipeline lenta
-        # Restituisci al client la risposta finale ricevuta
+        r = requests.post(next_url, files=files)
         return r.content, r.status_code, r.headers.items()
-    except requests.RequestException as e:
-        return jsonify({"error": f"Errore invio a step {chosen_next}: {str(e)}"}), 500
+    except Exception as e:
+        return jsonify({"error": f"Errore invio a step {chosen_next}: {e}"}), 500    
+
 
 
 if __name__ == "__main__":
