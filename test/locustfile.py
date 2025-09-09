@@ -1,5 +1,6 @@
-from locust import HttpUser, task, between
+from locust import HttpUser, task, between, events
 import subprocess
+import time
 
 def get_pipeline_entrypoints():
     result = subprocess.run(
@@ -19,6 +20,7 @@ def get_pipeline_entrypoints():
 ENTRYPOINTS = get_pipeline_entrypoints()
 print("Entrypoints trovati:", ENTRYPOINTS)
 
+
 class PipelineUser(HttpUser):
     wait_time = between(1, 3)
     host = "http://dummy"
@@ -32,6 +34,7 @@ class PipelineUser(HttpUser):
             self.client.base_url = base_url
             with open(image_file, "rb") as f:
                 files = {"image": (image_file, f, "image/jpeg")}
+                start_time = time.time()
                 with self.client.post(
                     "/process",
                     files=files,
@@ -41,9 +44,19 @@ class PipelineUser(HttpUser):
                     if resp.status_code == 200:
                         # 🔹 Estrai tempi degli step dagli header
                         step_times = {
-                            k: v for k, v in resp.headers.items() if k.startswith("X-Step-")
+                            k: float(v) for k, v in resp.headers.items() if k.startswith("X-Step-")
                         }
-                        print(f"[{name}] Tempi per step:", step_times)
                         resp.success()
+
+                        # 🔹 Registra ogni step come metrica personalizzata
+                        for step, elapsed in step_times.items():
+                            events.request.fire(
+                                request_type="STEP",
+                                name=f"{name}/{step}",
+                                response_time=elapsed * 1000,  # ms
+                                response_length=0,
+                                exception=None,
+                                context={},
+                            )
                     else:
                         resp.failure(f"Errore {resp.status_code}")
