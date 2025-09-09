@@ -52,7 +52,7 @@ class PipelineUser(HttpUser):
                         for step, elapsed in step_times.items():
                             events.request.fire(
                                 request_type="STEP",
-                                name=f"{name}/{step}",
+                                name=f"{step}",
                                 response_time=elapsed * 1000,  # ms
                                 response_length=0,
                                 exception=None,
