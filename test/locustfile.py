@@ -50,21 +50,15 @@ class PipelineUser(HttpUser):
 
                         # 🔹 Registra ogni step come metrica personalizzata
                         for step, elapsed in step_times.items():
-                            #events.request.fire(
-                            #    request_type="STEP",
-                            #    name=f"{step}",
-                            #    response_time=elapsed * 1000,  # ms
-                            #    response_length=0,
-                            #    exception=None,
-                            #    context={},
-                            #)
                             events.request.fire(
-                                request_type=f"{step}",
+                                request_type="STEP",
                                 name=f"{step}",
-                                response_time=elapsed * 1000,
+                                response_time=elapsed * 1000,  # ms
                                 response_length=0,
                                 exception=None,
+                                context={},
                             )
+
 
                     else:
                         resp.failure(f"Errore {resp.status_code}")
