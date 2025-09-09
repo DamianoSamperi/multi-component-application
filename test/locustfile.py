@@ -60,7 +60,7 @@ class PipelineUser(HttpUser):
                             #)
                             events.request.fire(
                                 request_type="POST",   # 👈 così finisce nei grafici
-                                name=f"STEP-{step_id}",
+                                name=f"{step}",
                                 response_time=elapsed * 1000,
                                 response_length=0,
                                 exception=None,
