@@ -55,7 +55,7 @@ if current_step_conf:
 def process():
     image_file = request.files["image"]
     image = Image.open(image_file).convert("RGB")
-
+    
     # ⏱️ misura tempo step
     start_time = time.time()
     for step in pipeline:
@@ -64,10 +64,6 @@ def process():
     
     # Header custom con il tempo di questo step
     step_header = {f"X-Step-{STEP_ID}-Time": str(elapsed)}
-    
-    # 1️⃣ Applica il processing di questo step
-    for step in pipeline:
-        image = step.run(image)
 
     # 2️⃣ Determina il prossimo step dalla config
     next_steps = current_step_conf.get("next_step", None)
