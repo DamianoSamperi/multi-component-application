@@ -9,7 +9,6 @@ app = Flask(__name__)
 def flatten_steps(steps: List[Union[Dict, List]], start_id=0):
     flat = []
     current_id = start_id
-
     for step in steps:
         if isinstance(step, dict):
             step_obj = {
@@ -105,11 +104,14 @@ def generate_deployments(steps: List[Dict], pipeline_prefix: str, namespace="def
     for step in steps:
         step_id = step["id"]
         deployment_name = f"{pipeline_prefix}-step-{step_id}"
-
+        if step.get("nodeSelector") == "jetsonorigin":
+            base_image = "dami00/multicomponent_service:r36"
+        else:
+            base_image = "dami00/multicomponent_service:latest"
         # container base
         container = {
             "name": "nn",
-            "image": "dami00/multicomponent_service",
+            "image": base_image,
             "imagePullPolicy": "IfNotPresent",
             "envFrom": [{"configMapRef": {"name": f"{pipeline_prefix}-step-{step_id}"}}],
             "env": [
