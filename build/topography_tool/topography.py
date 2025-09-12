@@ -185,7 +185,8 @@ def generate_services(steps: List[Dict], pipeline_prefix: str, namespace="defaul
         }
         
         if step["id"] == 0:
-            spec["type"] = "LoadBalancer"
+            spec["type"] = "NodePort"
+            spec["port"] = [{"port": 5000, "targetPort": 5000,"NodePort": 32400}]
         service = {
             "apiVersion": "v1",
             "kind": "Service",
