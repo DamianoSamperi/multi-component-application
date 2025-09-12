@@ -4,17 +4,18 @@ import time
 
 def get_pipeline_entrypoints():
     result = subprocess.run(
-        ["kubectl", "get", "svc", "-o", "jsonpath={range .items[*]}{.metadata.name} {.status.loadBalancer.ingress[0].ip} {.spec.ports[0].port}{\"\\n\"}{end}"],
+        ["kubectl", "get", "svc", "-o","jsonpath={range .items[*]}{.metadata.name} {.spec.type} {.spec.ports[0].nodePort}{\"\\n\"}{end}"],],
         stdout=subprocess.PIPE,
         text=True,
     )
+    node_ip = result.stdout.strip()
     entrypoints = []
     for line in result.stdout.splitlines():
         parts = line.split()
         if len(parts) == 3:
-            name, ip, port = parts
-            if name.endswith("step-0") and ip != "<none>":
-                entrypoints.append((name, f"http://{ip}:{port}"))
+            nname, svc_type, node_port = parts
+            if name.endswith("step-0") and svc_type == "NodePort":
+                entrypoints.append((name, f"http://{node_ip}:{node_port}"))
     return entrypoints
 
 ENTRYPOINTS = get_pipeline_entrypoints()
