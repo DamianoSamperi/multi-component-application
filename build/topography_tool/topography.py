@@ -104,6 +104,7 @@ def generate_deployments(steps: List[Dict], pipeline_prefix: str, namespace="def
     for step in steps:
         step_id = step["id"]
         deployment_name = f"{pipeline_prefix}-step-{step_id}"
+        node_selector = step.get("nodeSelector") or {}
         if node_selector.get("kubernetes.io/hostname") == "jetsonorigin":
             base_image = "dami00/multicomponent_service:r36"
         else:
@@ -141,7 +142,7 @@ def generate_deployments(steps: List[Dict], pipeline_prefix: str, namespace="def
         if volume_mounts:
             container["volumeMounts"] = volume_mounts
         # NodeSelector
-        node_selector = step.get("nodeSelector")
+        #node_selector = step.get("nodeSelector")
 
         deployment_spec = {
             "replicas": 1,
