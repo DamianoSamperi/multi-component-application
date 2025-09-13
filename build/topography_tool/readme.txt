@@ -3,4 +3,4 @@ curl -X POST http://<node-ip>:30080/pipeline \
      -H "Content-Type: application/json" \
      -d @pipeline.json
 CANCELLARE TOPOLOGIE GENERATE
-curl -X DELETE http://<service-ip>:8080/pipeline/pipeline-a1b2c3d4
+curl -X DELETE http://<node-ip>:30080/pipeline/pipeline-a1b2c3d4
