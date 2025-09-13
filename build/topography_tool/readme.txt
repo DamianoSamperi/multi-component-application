@@ -1,5 +1,5 @@
 INVIO TOPOLOGIA DA FILE JSON CON:
-curl -X POST http://<service-ip>:8080/pipeline \
+curl -X POST http://<node-ip>:30080/pipeline \
      -H "Content-Type: application/json" \
      -d @pipeline.json
 CANCELLARE TOPOLOGIE GENERATE
