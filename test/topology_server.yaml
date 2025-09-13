@@ -54,6 +54,8 @@ metadata:
 spec:
   selector:
     app: pipeline-controller
+  type: NodePort
   ports:
-  - port: 8080
-  type: LoadBalancer
+    - port: 8080        # porta interna del servizio
+      targetPort: 8080  # porta del pod
+      nodePort: 30080   # opzionale: porta esterna sul nodo, altrimenti sarà assegnata automaticamente
