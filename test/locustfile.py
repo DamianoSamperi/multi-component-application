@@ -3,14 +3,26 @@ import subprocess
 import time
 
 def get_pipeline_entrypoints():
-    result = subprocess.run(
-        ["kubectl", "get", "svc", "-o","jsonpath={range .items[*]}{.metadata.name} {.spec.type} {.spec.ports[0].nodePort}{\"\\n\"}{end}"],
+    # 🔹 1. Recupera l'IP di un nodo del cluster
+    node_ip_result = subprocess.run(
+        ["kubectl", "get", "nodes", "-o", "jsonpath={.items[0].status.addresses[?(@.type=='InternalIP')].address}"],
         stdout=subprocess.PIPE,
         text=True,
+        check=True
     )
-    node_ip = result.stdout.strip()
+    node_ip = node_ip_result.stdout.strip()
+
+    # 🔹 2. Recupera nome servizio, tipo e nodePort
+    svc_result = subprocess.run(
+        ["kubectl", "get", "svc",
+         "-o", "jsonpath={range .items[*]}{.metadata.name} {.spec.type} {.spec.ports[0].nodePort}{\"\\n\"}{end}"],
+        stdout=subprocess.PIPE,
+        text=True,
+        check=True
+    )
+
     entrypoints = []
-    for line in result.stdout.splitlines():
+    for line in svc_result.stdout.splitlines():
         parts = line.split()
         if len(parts) == 3:
             name, svc_type, node_port = parts
