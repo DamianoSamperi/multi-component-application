@@ -13,7 +13,7 @@ def get_pipeline_entrypoints():
     for line in result.stdout.splitlines():
         parts = line.split()
         if len(parts) == 3:
-            nname, svc_type, node_port = parts
+            name, svc_type, node_port = parts
             if name.endswith("step-0") and svc_type == "NodePort":
                 entrypoints.append((name, f"http://{node_ip}:{node_port}"))
     return entrypoints
