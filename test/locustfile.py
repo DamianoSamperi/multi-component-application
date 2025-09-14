@@ -4,7 +4,7 @@ import time
 
 def get_pipeline_entrypoints():
     result = subprocess.run(
-        ["kubectl", "get", "svc", "-o","jsonpath={range .items[*]}{.metadata.name} {.spec.type} {.spec.ports[0].nodePort}{\"\\n\"}{end}"],],
+        ["kubectl", "get", "svc", "-o","jsonpath={range .items[*]}{.metadata.name} {.spec.type} {.spec.ports[0].nodePort}{\"\\n\"}{end}"],
         stdout=subprocess.PIPE,
         text=True,
     )
