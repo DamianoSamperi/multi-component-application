@@ -85,7 +85,7 @@ COPY requirements.txt /app/
 # && pip3 install --no-cache-dir "numpy<2"
 RUN pip3 install --no-cache-dir --upgrade pip && \
     pip3 install --no-cache-dir --index-url https://pypi.org/simple --ignore-installed -r requirements.txt && \
-    pip3 install --no-cache-dir --index-url https://pypi.org/simple pillow opencv-python-headless
+    pip3 install --no-cache-dir --index-url https://pypi.org/simple pillow opencv-python-headless tensorflow_hub==0.16.1
 RUN pip3 uninstall -y numpy || true && \
     pip3 install --no-cache-dir "numpy<2"
 RUN pip3 uninstall -y tensorflow tensorflow-cpu tensorflow-gpu || true && \
