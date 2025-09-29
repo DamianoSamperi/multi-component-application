@@ -98,10 +98,10 @@ COPY --from=builder /root/glslang/build/install /root/glslang/install
 COPY --from=builder /root/realsr-ncnn-vulkan /root/realsr-ncnn-vulkan
 
 # Copy app code
-COPY app2.py /app/
+COPY app_with_tf.py /app/
 COPY /steps /app/steps
 
 EXPOSE 5000
 
 # Entrypoint con LD_LIBRARY_PATH settato solo per runtime
-ENTRYPOINT ["/bin/bash", "-c", "exec python3 app2.py"]
+ENTRYPOINT ["/bin/bash", "-c", "exec python3 app_with_tf.py"]
