@@ -1,0 +1,6 @@
+INVIO TOPOLOGIA DA FILE JSON CON:
+curl -X POST http://<node-ip>:30080/pipeline \
+     -H "Content-Type: application/json" \
+     -d @pipeline.json
+CANCELLARE TOPOLOGIE GENERATE
+curl -X DELETE http://<node-ip>:30080/pipeline/pipeline-a1b2c3d4
