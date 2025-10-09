@@ -42,7 +42,7 @@ spec:
       serviceAccountName: default
       containers:
       - name: controller
-        image: dami00/topology-controller:latest
+        image: 192.168.1.252:480/jetson/topology-controller:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
