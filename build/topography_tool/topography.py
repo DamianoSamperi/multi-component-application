@@ -107,9 +107,9 @@ def generate_deployments(steps: List[Dict], pipeline_prefix: str, namespace="def
         node_selector = step.get("nodeSelector") or {}
         #docker hub images: "dami00/multicomponent_service"
         if node_selector.get("kubernetes.io/hostname") == "jetsonorigin":
-            base_image = "http://192.168.1.252:480/jetson/multicomponent_service:r36"
+            base_image = "192.168.1.252:480/jetson/multicomponent_service:r36"
         else:
-            base_image = "http://192.168.1.252:480/jetson/multicomponent_service:latest"
+            base_image = "192.168.1.252:480/jetson/multicomponent_service:latest"
         # container base
         container = {
             "name": "nn",
