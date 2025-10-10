@@ -10,6 +10,9 @@ def flatten_steps(steps: List[Union[Dict, List]]):
     flat = []
     for step in steps:
         if isinstance(step, dict):
+            next_step = step.get("next_step", [])
+            if isinstance(next_step, int):
+                next_step = [next_step]
             step_obj = {
                 "id": step["step_id"],
                 "type": step["type"],
@@ -17,7 +20,8 @@ def flatten_steps(steps: List[Union[Dict, List]]):
                 "gpu": step.get("gpu", False),
                 "volumes": step.get("volumes", []),
                 "preferred_next": step.get("preferred_next"),
-                "next_step": [],
+                #"next_step": next_step,
+                "next_step": step.get("next_step",[]),
                 "nodeSelector": step.get("nodeSelector")
             }
             flat.append(step_obj)
@@ -25,15 +29,15 @@ def flatten_steps(steps: List[Union[Dict, List]]):
         elif isinstance(step, list):
             sub_flat = flatten_steps(step)
             # next_step del step precedente punta al primo sub-step
-            if flat:
-                flat[-1]["next_step"] = [sub_flat[0]["id"]]
+            #if flat:
+            #    flat[-1]["next_step"] = [sub_flat[0]["id"]]
             flat.extend(sub_flat)
-            current_id = flat[-1]["id"] + 1
+            #current_id = flat[-1]["id"] + 1
 
     # assegna next_step tra gli step principali
-    for i in range(len(flat) - 1):
-        if not flat[i]["next_step"]:
-            flat[i]["next_step"] = [flat[i + 1]["id"]]
+    #for i in range(len(flat) - 1):
+    #    if not flat[i]["next_step"]:
+    #        flat[i]["next_step"] = [flat[i + 1]["id"]]
 
     return flat
 
