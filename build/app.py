@@ -99,7 +99,7 @@ def process():
     #    if step_id is not None:
     #        active_steps.add(str(step_id))
     active_steps = set()
-    for cm in configmaps:
+    for cm in configmaps.items:
         try:
             cm_data = yaml.safe_load(cm.data.get("PIPELINE_CONFIG", "{}"))
             steps = cm_data.get("steps", [])
