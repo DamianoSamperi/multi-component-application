@@ -117,7 +117,7 @@ def generate_deployments(steps: List[Dict], pipeline_prefix: str, namespace="def
         container = {
             "name": "nn",
             "image": base_image,
-            "imagePullPolicy": "IfNotPresent",
+            "imagePullPolicy": "Always",
             "envFrom": [{"configMapRef": {"name": f"{pipeline_prefix}-step-{step_id}"}}],
             "env": [
                 {"name": "POD_NAMESPACE", "valueFrom": {"fieldRef": {"fieldPath": "metadata.namespace"}}}
