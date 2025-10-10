@@ -10,7 +10,7 @@
         "tta": false
       },
       "gpu": true,
-      "nodeSelector": {"kubernetes.io/hostname": "nano93"},
+      "nodeSelector": {"kubernetes.io/hostname": "jetsonorigin"},
       "volumes": ["cuda", "lib"]
     },
     {
