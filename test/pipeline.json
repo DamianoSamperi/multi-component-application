@@ -1,7 +1,9 @@
 {
   "steps": [
     {
+      "step_id": 0,
       "type": "upscaling",
+      "next_step": 1,
       "params": {
         "model_path": "/root/realsr-ncnn-vulkan/models/models-DF2K_JPEG",
         "scale_factor": 4,
@@ -12,7 +14,9 @@
       "volumes": ["cuda", "lib"]
     },
     {
+      "step_id": 1,
       "type": "detection",
+      "next_step": [2,3],
       "params": {
         "model_name": "pednet",
         "threshold": 0.5
@@ -24,6 +28,7 @@
     },
     [
       {
+        "step_id": 2,
         "type": "grayscale",
         "params": {},
         "gpu": true,
@@ -31,6 +36,7 @@
         "volumes": ["cuda", "lib"]
       },
       {
+        "step_id": 3,
         "type": "deblur",
         "params": {
           "radius": 2
