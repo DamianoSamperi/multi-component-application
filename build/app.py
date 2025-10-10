@@ -1,6 +1,5 @@
 import os
 import yaml
-import logging
 import io
 import requests
 import time
@@ -103,18 +102,20 @@ def process():
         try:
             cm_data = yaml.safe_load(cm.data.get("PIPELINE_CONFIG", "{}"))
             steps = cm_data.get("steps", [])
+            print(f"Processing ConfigMap: {cm.metadata.name}")
             for step in steps:
                 step_id = step.get("id")
                 if step_id is not None:
                     active_steps.add(str(step_id))
-                    logging.info(f"Step ID {step_id} aggiunto da ConfigMap {cm.metadata.name}")
+                    print(f"  Added step ID {step_id} from ConfigMap {cm.metadata.name}")
         except Exception as e:
-            logging.error(f"Errore nel processare ConfigMap {cm.metadata.name}: {e}")
+            print(f"  ERROR processing ConfigMap {cm.metadata.name}: {e}")
 
 
     # 4️⃣ Filtra i prossimi step in base alle ConfigMap attive
     available_next = [s for s in next_steps if str(s) in active_steps]
-    logging.info(f"Prossimi step disponibili: {available_next}")
+    print(f"Next steps: {next_steps}")
+    print(f"Available next steps: {available_next}")
 
     if not available_next:
         return jsonify({"error": "Nessun prossimo step attivo per questa pipeline"}), 500
@@ -123,10 +124,10 @@ def process():
     preferred = current_step_conf.get("preferred_next")
     if preferred and str(preferred) in available_next:
         chosen_next = preferred
-        logging.info(f"Step preferito {preferred} selezionato")
+        print(f"Preferred step {preferred} selected")
     else:
         chosen_next = sorted(available_next)[0]
-        logging.info(f"Step scelto: {chosen_next}")
+        print(f"Preferred step {preferred} not in available steps")
 
     # 5️⃣ Costruisci URL per il prossimo step (scoped alla pipeline)
     next_url = (
