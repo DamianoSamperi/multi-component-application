@@ -6,13 +6,12 @@ from typing import Union, List, Dict
 
 app = Flask(__name__)
 
-def flatten_steps(steps: List[Union[Dict, List]], start_id=0):
+def flatten_steps(steps: List[Union[Dict, List]]):
     flat = []
-    current_id = start_id
     for step in steps:
         if isinstance(step, dict):
             step_obj = {
-                "id": current_id,
+                "id": step["step_id"],
                 "type": step["type"],
                 "params": step.get("params", {}),
                 "gpu": step.get("gpu", False),
@@ -22,9 +21,9 @@ def flatten_steps(steps: List[Union[Dict, List]], start_id=0):
                 "nodeSelector": step.get("nodeSelector")
             }
             flat.append(step_obj)
-            current_id += 1
+            #current_id += 1
         elif isinstance(step, list):
-            sub_flat = flatten_steps(step, start_id=current_id)
+            sub_flat = flatten_steps(step)
             # next_step del step precedente punta al primo sub-step
             if flat:
                 flat[-1]["next_step"] = [sub_flat[0]["id"]]
