@@ -155,6 +155,7 @@ def generate_deployments(steps: List[Dict], pipeline_prefix: str, namespace="def
             "template": {
                 "metadata": {"labels": {"app": "nn-service", "step": str(step_id), "pipeline_id": pipeline_prefix}},
                 "spec": {
+                    "schedulerName": "scheduler-plugins-scheduler",
                     "containers": [container],
                     "volumes": volumes if volumes else [],
                 },
