@@ -90,13 +90,22 @@ def process():
     except Exception as e:
         return jsonify({"error": f"Errore API Kubernetes: {e}"}), 500
 
+    #active_steps = set()
+    #for cm in configmaps.items:
+    #    # Ricava lo step_id dalla ConfigMap
+    #    cm_data = yaml.safe_load(cm.data.get("PIPELINE_CONFIG", "{}"))
+    #    step_id = cm_data.get("step_id")
+    #    if step_id is not None:
+    #        active_steps.add(str(step_id))
     active_steps = set()
     for cm in configmaps.items:
-        # Ricava lo step_id dalla ConfigMap
         cm_data = yaml.safe_load(cm.data.get("PIPELINE_CONFIG", "{}"))
-        step_id = cm_data.get("step_id")
-        if step_id is not None:
-            active_steps.add(str(step_id))
+        steps = cm_data.get("steps", [])
+        for step in steps:
+            step_id = step.get("id")
+            if step_id is not None:
+                active_steps.add(str(step_id))
+
 
     # 4️⃣ Filtra i prossimi step in base alle ConfigMap attive
     available_next = [s for s in next_steps if str(s) in active_steps]
