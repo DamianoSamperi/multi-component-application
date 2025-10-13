@@ -2,6 +2,7 @@ from locust import HttpUser, task, between, events, LoadTestShape
 import subprocess
 import time
 import math
+import sys
 
 def get_pipeline_entrypoints():
     # 🔹 1. Recupera l'IP di un nodo del cluster
@@ -80,58 +81,58 @@ class PipelineUser(HttpUser):
 # ===============================
 # 🔹 Scelta curva da CLI
 # ===============================
-# 🔹 Parametri globali impostati dalla CLI
-CURVE_TYPE = "ramp"
-CURVE_USERS = 20
-CURVE_DURATION = 60
-CURVE_SPAWN_RATE = 2
+# Controlla se sono passati i parametri CLI custom
+USE_CUSTOM_SHAPE = any(arg.startswith("--curve") for arg in sys.argv)
 
-# 🔹 Listener CLI
-from locust import events
+if USE_CUSTOM_SHAPE:
+    # Definisci CustomShape solo se --curve viene passato
+    import math
 
-@events.init_command_line_parser.add_listener
-def _(parser):
-    parser.add_argument("--curve", type=str, default="ramp")
-    parser.add_argument("--curve-users", type=int, default=20)
-    parser.add_argument("--curve-duration", type=int, default=60)
-    parser.add_argument("--curve-spawn-rate", type=float, default=2)
+    CURVE_TYPE = "ramp"
+    CURVE_USERS = 20
+    CURVE_DURATION = 60
+    CURVE_SPAWN_RATE = 2
 
-@events.init.add_listener
-def _(environment, **kwargs):
-    global CURVE_TYPE, CURVE_USERS, CURVE_DURATION, CURVE_SPAWN_RATE
-    CURVE_TYPE = getattr(environment.parsed_options, "curve", "ramp")
-    CURVE_USERS = getattr(environment.parsed_options, "curve_users", 20)
-    CURVE_DURATION = getattr(environment.parsed_options, "curve_duration", 60)
-    CURVE_SPAWN_RATE = getattr(environment.parsed_options, "curve_spawn_rate", 2)
+    @events.init_command_line_parser.add_listener
+    def _(parser):
+        parser.add_argument("--curve", type=str, default=CURVE_TYPE)
+        parser.add_argument("--curve-users", type=int, default=CURVE_USERS)
+        parser.add_argument("--curve-duration", type=int, default=CURVE_DURATION)
+        parser.add_argument("--curve-spawn-rate", type=float, default=CURVE_SPAWN_RATE)
 
-# 🔹 Custom shape
-class CustomShape(LoadTestShape):
-    def tick(self):
-        run_time = self.get_run_time()
-        users = int(CURVE_USERS)
-        duration = CURVE_DURATION
-        spawn_rate = CURVE_SPAWN_RATE
-        curve = CURVE_TYPE
+    @events.init.add_listener
+    def _(environment, **kwargs):
+        global CURVE_TYPE, CURVE_USERS, CURVE_DURATION, CURVE_SPAWN_RATE
+        CURVE_TYPE = getattr(environment.parsed_options, "curve", CURVE_TYPE)
+        CURVE_USERS = getattr(environment.parsed_options, "curve_users", CURVE_USERS)
+        CURVE_DURATION = getattr(environment.parsed_options, "curve_duration", CURVE_DURATION)
+        CURVE_SPAWN_RATE = getattr(environment.parsed_options, "curve_spawn_rate", CURVE_SPAWN_RATE)
 
-        if run_time > duration:
-            return None
+    class CustomShape(LoadTestShape):
+        def tick(self):
+            run_time = self.get_run_time()
+            users = CURVE_USERS
+            duration = CURVE_DURATION
+            spawn_rate = CURVE_SPAWN_RATE
+            curve = CURVE_TYPE
 
-        if curve == "ramp":
-            current_users = int(users * run_time / duration)
-        elif curve == "step":
-            step_time = duration / 5
-            step_level = int(run_time // step_time)
-            current_users = int((step_level + 1) * users / 5)
-        elif curve == "spike":
-            if run_time < duration / 4 or run_time > 3 * duration / 4:
-                current_users = int(users / 10)
+            if run_time > duration:
+                return None
+
+            if curve == "ramp":
+                current_users = int(users * run_time / duration)
+            elif curve == "step":
+                step_time = duration / 5
+                step_level = int(run_time // step_time)
+                current_users = int((step_level + 1) * users / 5)
+            elif curve == "spike":
+                if run_time < duration / 4 or run_time > 3 * duration / 4:
+                    current_users = int(users / 10)
+                else:
+                    current_users = users
+            elif curve == "sinus":
+                current_users = int((users / 2) * (1 + math.sin(run_time / duration * 2 * math.pi)))
             else:
                 current_users = users
-        elif curve == "sinus":
-            current_users = int((users / 2) * (1 + math.sin(run_time / duration * 2 * math.pi)))
-        else:
-            current_users = users
 
-        return (current_users, spawn_rate)
-        
-shape = CustomShape()
+            return (current_users, spawn_rate)
