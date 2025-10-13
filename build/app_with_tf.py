@@ -92,11 +92,17 @@ def process():
 
     active_steps = set()
     for cm in configmaps.items:
-        # Ricava lo step_id dalla ConfigMap
-        cm_data = yaml.safe_load(cm.data.get("PIPELINE_CONFIG", "{}"))
-        step_id = cm_data.get("step_id")
-        if step_id is not None:
-            active_steps.add(str(step_id))
+        try:
+            cm_data = yaml.safe_load(cm.data.get("PIPELINE_CONFIG", "{}"))
+            steps = cm_data.get("steps", [])
+            logging.info(f"Processing ConfigMap: {cm.metadata.name}")
+            for step in steps:
+                step_id = step.get("id")
+                if step_id is not None:
+                    active_steps.add(str(step_id))
+                    logging.info(f"Step ID {step_id} aggiunto da ConfigMap {cm.metadata.name}")
+        except Exception as e:
+            logging.error(f"Errore nel processare ConfigMap {cm.metadata.name}: {e}")
 
     # 4️⃣ Filtra i prossimi step in base alle ConfigMap attive
     available_next = [s for s in next_steps if str(s) in active_steps]
