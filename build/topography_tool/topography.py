@@ -187,12 +187,12 @@ def generate_services(steps: List[Dict], pipeline_prefix: str, namespace="defaul
         service_name = f"{pipeline_prefix}-step-{step_id}"
         spec = {
             "selector": {"app": "nn-service", "step": str(step_id)},
-            "ports": [{"port": 5000, "targetPort": 5000}],
+            "ports": [{"port": 5000, "targetPort": 8080}],
         }
         
         if step["id"] == 0:
             spec["type"] = "NodePort"
-            spec["port"] = [{"port": 5000, "targetPort": 5000,"NodePort": 32400}]
+            spec["port"] = [{"port": 5000, "targetPort": 8080,"NodePort": 32400}]
         service = {
             "apiVersion": "v1",
             "kind": "Service",
