@@ -97,10 +97,19 @@ def _(parser):
 class CustomShape(LoadTestShape):
     def tick(self):
         run_time = self.get_run_time()
-        curve = getattr(self.environment.parsed_options, "curve", "ramp")
-        users = getattr(self.environment.parsed_options, "curve_users", 20)
-        duration = getattr(self.environment.parsed_options, "curve_duration", 60)
-        spawn_rate = getattr(self.environment.parsed_options, "curve_spawn_rate", 2)
+
+        # 🔹 Controllo che environment esista
+        if hasattr(self, "environment") and hasattr(self.environment, "parsed_options"):
+            curve = getattr(self.environment.parsed_options, "curve", "ramp")
+            users = getattr(self.environment.parsed_options, "curve_users", 20)
+            duration = getattr(self.environment.parsed_options, "curve_duration", 60)
+            spawn_rate = getattr(self.environment.parsed_options, "curve_spawn_rate", 2)
+        else:
+            # valori di default provvisori, per evitare crash all’avvio web
+            curve = "ramp"
+            users = 1
+            duration = 60
+            spawn_rate = 1
 
         if run_time > duration:
             return None
