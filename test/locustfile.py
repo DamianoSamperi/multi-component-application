@@ -1,4 +1,4 @@
-from locust import HttpUser, task, between, events
+from locust import HttpUser, task, between, events, LoadTestShape
 import subprocess
 import time
 
