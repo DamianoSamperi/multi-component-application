@@ -220,31 +220,31 @@ your_image.jpg      # Immagine di test inviata agli endpoint
 ### Avvio con curva **Ramp**
 
 ```bash
-locust -f locustfile.py --curve ramp --users 50 --duration 120 --spawn-rate 5
+locust -f locustfile.py --curve ramp --curve-users 50 --curve-duration 120 --curve-spawn-rate 5
 ```
 
 ### Avvio con curva **Step**
 
 ```bash
-locust -f locustfile.py --curve step --users 50 --duration 120 --spawn-rate 5
+locust -f locustfile.py --curve step --curve-users 50 --curve-duration 120 --curve-spawn-rate 5
 ```
 
 ### Avvio con curva **Spike**
 
 ```bash
-locust -f locustfile.py --curve spike --users 100 --duration 180
+locust -f locustfile.py --curve spike --curve-users 100 --curve-duration 180
 ```
 
 ### Avvio con curva **Sinus**
 
 ```bash
-locust -f locustfile.py --curve sinus --users 30 --duration 60 --spawn-rate 3
+locust -f locustfile.py --curve sinus --curve-users 30 --curve-duration 60 --curve-spawn-rate 3
 ```
 
 ### Avvio con curva **Flat**
 
 ```bash
-locust -f locustfile.py --curve flat --users 20 --duration 60 --spawn-rate 2
+locust -f locustfile.py --curve flat --curve-users 20 --curve-duration 60 --curve-spawn-rate 2
 ```
 
 ---
@@ -254,9 +254,9 @@ locust -f locustfile.py --curve flat --users 20 --duration 60 --spawn-rate 2
 | Parametro      | Default | Descrizione                                                       |
 | -------------- | ------- | ----------------------------------------------------------------- |
 | `--curve`      | ramp    | Tipo di curva di carico: `ramp`, `step`, `spike`, `sinus`, `flat` |
-| `--users`      | 20      | Numero massimo di utenti simultanei                               |
-| `--duration`   | 60      | Durata totale del test in secondi                                 |
-| `--spawn-rate` | 2       | Numero di utenti creati al secondo                                |
+| `--curve-users`      | 20      | Numero massimo di utenti simultanei                               |
+| `--curve-duration`   | 60      | Durata totale del test in secondi                                 |
+| `--curve-spawn-rate` | 2       | Numero di utenti creati al secondo                                |
 
 
 ---
