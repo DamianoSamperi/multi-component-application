@@ -21,7 +21,7 @@ config = yaml.safe_load(pipeline_yaml)
 
 # --- Config ---
 NAMESPACE = os.getenv("POD_NAMESPACE", "default")
-SERVICE_PORT = os.getenv("SERVICE_PORT", "5000")
+SERVICE_PORT = os.getenv("SERVICE_PORT", "8080")
 APP_LABEL = os.getenv("APP_LABEL", "nn-service")
 PIPELINE_ID = config.get("pipeline_id")  # viene letto dalla ConfigMap
 
