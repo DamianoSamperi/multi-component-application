@@ -1,6 +1,7 @@
 from locust import HttpUser, task, between, events, LoadTestShape
 import subprocess
 import time
+import math
 
 def get_pipeline_entrypoints():
     # 🔹 1. Recupera l'IP di un nodo del cluster
@@ -96,25 +97,21 @@ def _(parser):
 class CustomShape(LoadTestShape):
     def tick(self):
         run_time = self.get_run_time()
-
-        # Leggi i parametri dalla CLI
+        
         curve = getattr(self.environment.parsed_options, "curve", "ramp")
         users = getattr(self.environment.parsed_options, "curve_users", 20)
         duration = getattr(self.environment.parsed_options, "curve_duration", 60)
         spawn_rate = getattr(self.environment.parsed_options, "curve_spawn_rate", 2)
 
-
         if run_time > duration:
             return None
 
-        # --- Curve diverse ---
-        import math
         if curve == "ramp":
-            current_users = int(users * (run_time / duration))
+            current_users = int(users * run_time / duration)
         elif curve == "step":
             step_time = duration / 5
             step_level = int(run_time // step_time)
-            current_users = int((step_level + 1) * (users / 5))
+            current_users = int((step_level + 1) * users / 5)
         elif curve == "spike":
             if run_time < duration / 4 or run_time > 3 * duration / 4:
                 current_users = int(users / 10)
@@ -122,11 +119,8 @@ class CustomShape(LoadTestShape):
                 current_users = users
         elif curve == "sinus":
             current_users = int((users / 2) * (1 + math.sin(run_time / duration * 2 * math.pi)))
-        elif curve == "flat":
+        else:  # flat
             current_users = users
-        else:
-            current_users = 1
 
         return (current_users, spawn_rate)
-
 shape = CustomShape()
