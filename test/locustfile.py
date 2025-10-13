@@ -75,3 +75,57 @@ class PipelineUser(HttpUser):
 
                     else:
                         resp.failure(f"Errore {resp.status_code}")
+                        
+# ===============================
+# 🔹 Scelta curva da CLI
+# ===============================
+@events.init_command_line_parser.add_listener
+def _(parser):
+    parser.add_argument("--curve", type=str, default="ramp",
+                        help="Tipo di curva: ramp, step, spike, sinus, flat")
+    parser.add_argument("--users", type=int, default=20, help="Numero massimo utenti")
+    parser.add_argument("--duration", type=int, default=60, help="Durata test in secondi")
+    parser.add_argument("--spawn-rate", type=float, default=2, help="Tasso di spawn utenti/sec")
+
+
+# ===============================
+# 🔹 Definizione curve di carico
+# ===============================
+class CustomShape(LoadTestShape):
+
+    def __init__(self):
+        super().__init__()
+        self.curve = self.get_env().parsed_options.curve
+        self.users = self.get_env().parsed_options.users
+        self.duration = self.get_env().parsed_options.duration
+        self.spawn_rate = self.get_env().parsed_options.spawn_rate
+
+    def tick(self):
+        run_time = self.get_run_time()
+
+        if run_time > self.duration:
+            return None
+
+        # --- Diversi tipi di curve ---
+        if self.curve == "ramp":
+            users = int(self.users * (run_time / self.duration))
+        elif self.curve == "step":
+            step_time = self.duration / 5
+            step_level = int(run_time // step_time)
+            users = int((step_level + 1) * (self.users / 5))
+        elif self.curve == "spike":
+            if run_time < self.duration / 4 or run_time > 3 * self.duration / 4:
+                users = int(self.users / 10)
+            else:
+                users = self.users
+        elif self.curve == "sinus":
+            users = int((self.users / 2) * (1 + math.sin(run_time / self.duration * 2 * math.pi)))
+        elif self.curve == "flat":
+            users = self.users
+        else:
+            users = 1
+
+        return (users, self.spawn_rate)
+
+
+shape = CustomShape()
