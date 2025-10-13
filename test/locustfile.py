@@ -92,40 +92,38 @@ def _(parser):
 # 🔹 Definizione curve di carico
 # ===============================
 class CustomShape(LoadTestShape):
-
-    def __init__(self):
-        super().__init__()
-        self.curve = self.get_env().parsed_options.curve
-        self.users = self.get_env().parsed_options.users
-        self.duration = self.get_env().parsed_options.duration
-        self.spawn_rate = self.get_env().parsed_options.spawn_rate
-
     def tick(self):
         run_time = self.get_run_time()
 
-        if run_time > self.duration:
+        # Leggi i parametri dalla CLI
+        curve = getattr(self.environment.parsed_options, "curve", "ramp")
+        users = getattr(self.environment.parsed_options, "users", 20)
+        duration = getattr(self.environment.parsed_options, "duration", 60)
+        spawn_rate = getattr(self.environment.parsed_options, "spawn_rate", 2)
+
+        if run_time > duration:
             return None
 
-        # --- Diversi tipi di curve ---
-        if self.curve == "ramp":
-            users = int(self.users * (run_time / self.duration))
-        elif self.curve == "step":
-            step_time = self.duration / 5
+        # --- Curve diverse ---
+        import math
+        if curve == "ramp":
+            current_users = int(users * (run_time / duration))
+        elif curve == "step":
+            step_time = duration / 5
             step_level = int(run_time // step_time)
-            users = int((step_level + 1) * (self.users / 5))
-        elif self.curve == "spike":
-            if run_time < self.duration / 4 or run_time > 3 * self.duration / 4:
-                users = int(self.users / 10)
+            current_users = int((step_level + 1) * (users / 5))
+        elif curve == "spike":
+            if run_time < duration / 4 or run_time > 3 * duration / 4:
+                current_users = int(users / 10)
             else:
-                users = self.users
-        elif self.curve == "sinus":
-            users = int((self.users / 2) * (1 + math.sin(run_time / self.duration * 2 * math.pi)))
-        elif self.curve == "flat":
-            users = self.users
+                current_users = users
+        elif curve == "sinus":
+            current_users = int((users / 2) * (1 + math.sin(run_time / duration * 2 * math.pi)))
+        elif curve == "flat":
+            current_users = users
         else:
-            users = 1
+            current_users = 1
 
-        return (users, self.spawn_rate)
-
+        return (current_users, spawn_rate)
 
 shape = CustomShape()
