@@ -83,9 +83,13 @@ class PipelineUser(HttpUser):
 def _(parser):
     parser.add_argument("--curve", type=str, default="ramp",
                         help="Tipo di curva: ramp, step, spike, sinus, flat")
-    parser.add_argument("--users", type=int, default=20, help="Numero massimo utenti")
-    parser.add_argument("--duration", type=int, default=60, help="Durata test in secondi")
-    parser.add_argument("--spawn-rate", type=float, default=2, help="Tasso di spawn utenti/sec")
+    parser.add_argument("--curve-users", type=int, default=20,
+                        help="Numero massimo utenti per la curva")
+    parser.add_argument("--curve-duration", type=int, default=60,
+                        help="Durata test in secondi")
+    parser.add_argument("--spawn-rate", type=float, default=2,
+                        help="Tasso di spawn utenti/sec")
+
 
 
 # ===============================
@@ -97,8 +101,8 @@ class CustomShape(LoadTestShape):
 
         # Leggi i parametri dalla CLI
         curve = getattr(self.environment.parsed_options, "curve", "ramp")
-        users = getattr(self.environment.parsed_options, "users", 20)
-        duration = getattr(self.environment.parsed_options, "duration", 60)
+        users = getattr(self.environment.parsed_options, "curve_users", 20)
+        duration = getattr(self.environment.parsed_options, "curve_duration", 60)
         spawn_rate = getattr(self.environment.parsed_options, "spawn_rate", 2)
 
         if run_time > duration:
