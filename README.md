@@ -209,7 +209,7 @@ pip install locust
 ## Struttura file
 
 ```text
-pipeline_test.py    # Script principale con LocustUser e LoadTestShape
+locustfile.py    # Script principale con LocustUser e LoadTestShape
 your_image.jpg      # Immagine di test inviata agli endpoint
 ```
 
@@ -220,31 +220,31 @@ your_image.jpg      # Immagine di test inviata agli endpoint
 ### Avvio con curva **Ramp**
 
 ```bash
-locust -f pipeline_test.py --curve ramp --users 50 --duration 120 --spawn-rate 5
+locust -f locustfile.py --curve ramp --users 50 --duration 120 --spawn-rate 5
 ```
 
 ### Avvio con curva **Step**
 
 ```bash
-locust -f pipeline_test.py --curve step --users 50 --duration 120 --spawn-rate 5
+locust -f locustfile.py --curve step --users 50 --duration 120 --spawn-rate 5
 ```
 
 ### Avvio con curva **Spike**
 
 ```bash
-locust -f pipeline_test.py --curve spike --users 100 --duration 180
+locust -f locustfile.py --curve spike --users 100 --duration 180
 ```
 
 ### Avvio con curva **Sinus**
 
 ```bash
-locust -f pipeline_test.py --curve sinus --users 30 --duration 60 --spawn-rate 3
+locust -f locustfile.py --curve sinus --users 30 --duration 60 --spawn-rate 3
 ```
 
 ### Avvio con curva **Flat**
 
 ```bash
-locust -f pipeline_test.py --curve flat --users 20 --duration 60 --spawn-rate 2
+locust -f locustfile.py --curve flat --users 20 --duration 60 --spawn-rate 2
 ```
 
 ---
