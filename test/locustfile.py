@@ -97,7 +97,6 @@ def _(parser):
 class CustomShape(LoadTestShape):
     def tick(self):
         run_time = self.get_run_time()
-        
         curve = getattr(self.environment.parsed_options, "curve", "ramp")
         users = getattr(self.environment.parsed_options, "curve_users", 20)
         duration = getattr(self.environment.parsed_options, "curve_duration", 60)
@@ -119,8 +118,9 @@ class CustomShape(LoadTestShape):
                 current_users = users
         elif curve == "sinus":
             current_users = int((users / 2) * (1 + math.sin(run_time / duration * 2 * math.pi)))
-        else:  # flat
+        else:
             current_users = users
 
         return (current_users, spawn_rate)
+        
 shape = CustomShape()
