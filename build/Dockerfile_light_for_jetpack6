@@ -40,8 +40,8 @@ RUN git clone https://github.com/nihui/realsr-ncnn-vulkan.git && \
 ###########################################
 # Stage 2: Runtime
 ###########################################
-#FROM nvcr.io/nvidia/l4t-base:r36.2.0
-FROM nvcr.io/nvidia/l4t-cuda:12.2.12-devel
+FROM nvcr.io/nvidia/l4t-base:r36.2.0
+#FROM nvcr.io/nvidia/l4t-cuda:12.2.12-devel
 #FROM dustynv/l4t-pytorch:r36.2.0
 WORKDIR /app
 ENV DEBIAN_FRONTEND=noninteractive
@@ -85,12 +85,12 @@ COPY requirements.txt /app/
 # && pip3 install --no-cache-dir "numpy<2"
 RUN pip3 install --no-cache-dir --upgrade pip && \
     pip3 install --no-cache-dir --index-url https://pypi.org/simple --ignore-installed -r requirements.txt && \
-    pip3 install --no-cache-dir --index-url https://pypi.org/simple pillow opencv-python-headless tensorflow_hub==0.16.1
+    pip3 install --no-cache-dir --index-url https://pypi.org/simple pillow opencv-python-headless
 RUN pip3 uninstall -y numpy || true && \
     pip3 install --no-cache-dir "numpy<2"
 RUN pip3 uninstall -y tensorflow tensorflow-cpu tensorflow-gpu || true && \
     pip3 install --no-cache-dir https://developer.download.nvidia.com/compute/redist/jp/v61/tensorflow/tensorflow-2.16.1+nv24.08-cp310-cp310-linux_aarch64.whl
-RUN pip3 install --no-cache-dir tf-keras==2.16.0 "protobuf<5"
+RUN pip3 install --no-cache-dir tf-keras==2.16.0 "protobuf<5" tensorflow_hub
 
 # Copy custom binaries from builder
 #COPY --from=builder /usr/local/gcc-10.1.0 /usr/local/gcc-10.1.0
@@ -100,7 +100,7 @@ COPY --from=builder /root/realsr-ncnn-vulkan /root/realsr-ncnn-vulkan
 # Copy app code
 COPY app_with_tf.py /app/
 COPY /steps /app/steps
-
+ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/lib/aarch64-linux-gnu
 EXPOSE 5000
 
 # Entrypoint con LD_LIBRARY_PATH settato solo per runtime
