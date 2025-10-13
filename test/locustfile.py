@@ -80,36 +80,38 @@ class PipelineUser(HttpUser):
 # ===============================
 # 🔹 Scelta curva da CLI
 # ===============================
+# 🔹 Parametri globali impostati dalla CLI
+CURVE_TYPE = "ramp"
+CURVE_USERS = 20
+CURVE_DURATION = 60
+CURVE_SPAWN_RATE = 2
+
+# 🔹 Listener CLI
+from locust import events
+
 @events.init_command_line_parser.add_listener
 def _(parser):
-    parser.add_argument("--curve", type=str, default="ramp",
-                        help="Tipo di curva: ramp, step, spike, sinus, flat")
-    parser.add_argument("--curve-users", type=int, default=20,
-                        help="Numero massimo utenti per la curva")
-    parser.add_argument("--curve-duration", type=int, default=60,
-                        help="Durata del test in secondi")
-    parser.add_argument("--curve-spawn-rate", type=float, default=2,
-                        help="Tasso di spawn utenti/sec")
+    parser.add_argument("--curve", type=str, default="ramp")
+    parser.add_argument("--curve-users", type=int, default=20)
+    parser.add_argument("--curve-duration", type=int, default=60)
+    parser.add_argument("--curve-spawn-rate", type=float, default=2)
 
-# ===============================
-# 🔹 Definizione curve di carico
-# ===============================
+@events.init.add_listener
+def _(environment, **kwargs):
+    global CURVE_TYPE, CURVE_USERS, CURVE_DURATION, CURVE_SPAWN_RATE
+    CURVE_TYPE = getattr(environment.parsed_options, "curve", "ramp")
+    CURVE_USERS = getattr(environment.parsed_options, "curve_users", 20)
+    CURVE_DURATION = getattr(environment.parsed_options, "curve_duration", 60)
+    CURVE_SPAWN_RATE = getattr(environment.parsed_options, "curve_spawn_rate", 2)
+
+# 🔹 Custom shape
 class CustomShape(LoadTestShape):
     def tick(self):
         run_time = self.get_run_time()
-
-        # 🔹 Controllo che environment esista
-        if hasattr(self, "environment") and hasattr(self.environment, "parsed_options"):
-            curve = getattr(self.environment.parsed_options, "curve", "ramp")
-            users = getattr(self.environment.parsed_options, "curve_users", 20)
-            duration = getattr(self.environment.parsed_options, "curve_duration", 60)
-            spawn_rate = getattr(self.environment.parsed_options, "curve_spawn_rate", 2)
-        else:
-            # valori di default provvisori, per evitare crash all’avvio web
-            curve = "ramp"
-            users = 1
-            duration = 60
-            spawn_rate = 1
+        users = int(CURVE_USERS)
+        duration = CURVE_DURATION
+        spawn_rate = CURVE_SPAWN_RATE
+        curve = CURVE_TYPE
 
         if run_time > duration:
             return None
