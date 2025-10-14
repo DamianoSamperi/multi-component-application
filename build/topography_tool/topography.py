@@ -178,32 +178,19 @@ def generate_deployments(steps: List[Dict], pipeline_prefix: str, namespace="def
         deployments.append(deployment)
 
     return deployments
-
-
+# Prova traefik
 def generate_services(steps: List[Dict], pipeline_prefix: str, namespace="default") -> List[Dict]:
-    """
-    Genera i service per ogni step della pipeline.
-    """
     services = []
 
     for step in steps:
         step_id = step["id"]
-        service_name = f"{pipeline_prefix}-step-{step_id}"
+        service_name = f"{pipeline_prefix}-step-{step_id}"  # nome pulito
         spec = {
             "selector": {"app": "nn-service", "step": str(step_id)},
             "ports": [{"port": 5000, "targetPort": 5000}],
+            "type": "ClusterIP",  # basta ClusterIP per mesh interno
         }
-        
-        if step["id"] == 0:
-            spec["type"] = "NodePort"
-            spec["ports"] = [{"port": 5000, "targetPort": 5000,"nodePort": 32400}]
-        #service = {
-        #    "apiVersion": "v1",
-        #    "kind": "Service",
-        #    "metadata": {"name": service_name, "namespace": namespace,"labels":{"pipeline_id": pipeline_prefix}},
-        #    "spec": spec,
-        #}
-        # Prova traefik mesh
+
         service = {
             "apiVersion": "v1",
             "kind": "Service",
@@ -212,11 +199,7 @@ def generate_services(steps: List[Dict], pipeline_prefix: str, namespace="defaul
                 "namespace": namespace,
                 "labels": {
                     "pipeline_id": pipeline_prefix,
-                    "traefik-mesh.traefik.io/enable": "true"
-                },
-                "annotations": {
-                    # opzionale, utile per debug o tracciamento
-                    "created-by": "pipeline-controller",
+                    "traefik-mesh.traefik.io/enable": "true",  # necessario per .mesh.local
                 },
             },
             "spec": spec,
@@ -225,6 +208,34 @@ def generate_services(steps: List[Dict], pipeline_prefix: str, namespace="defaul
         services.append(service)
 
     return services
+
+# def generate_services(steps: List[Dict], pipeline_prefix: str, namespace="default") -> List[Dict]:
+#     """
+#     Genera i service per ogni step della pipeline.
+#     """
+#     services = []
+
+#     for step in steps:
+#         step_id = step["id"]
+#         service_name = f"{pipeline_prefix}-step-{step_id}"
+#         spec = {
+#             "selector": {"app": "nn-service", "step": str(step_id)},
+#             "ports": [{"port": 5000, "targetPort": 5000}],
+#         }
+        
+#         if step["id"] == 0:
+#             spec["type"] = "NodePort"
+#             spec["ports"] = [{"port": 5000, "targetPort": 5000,"nodePort": 32400}]
+#         service = {
+#             "apiVersion": "v1",
+#             "kind": "Service",
+#             "metadata": {"name": service_name, "namespace": namespace,"labels":{"pipeline_id": pipeline_prefix}},
+#             "spec": spec,
+#         }
+
+#         services.append(service)
+
+#     return services
 
 
 
