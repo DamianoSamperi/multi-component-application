@@ -130,11 +130,11 @@ def process():
 
     # 5️⃣ Costruisci URL per il prossimo step (scoped alla pipeline)
     #next_url = (
-    #    f"http://{PIPELINE_ID}-step-{chosen_next}.{NAMESPACE}.svc.cluster.local:{SERVICE_PORT}/process"
+    #    f"http://{PIPELINE_ID}-step-{chosen_next}.{NAMESPACE}.svc.cluster.local:{}/process"
     #)
     # Prova traefik-mesh
     next_url = (
-    f"http://{PIPELINE_ID}-step-{chosen_next}.mesh.local:{SERVICE_PORT}/process"
+    f"http://{PIPELINE_ID}-step-{chosen_next}.mesh.local:{}/process"
     )
 
 
