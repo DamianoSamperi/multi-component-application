@@ -193,10 +193,28 @@ def generate_services(steps: List[Dict], pipeline_prefix: str, namespace="defaul
         if step["id"] == 0:
             spec["type"] = "NodePort"
             spec["port"] = [{"port": 5000, "targetPort": 5000,"NodePort": 32400}]
+        //service = {
+        //    "apiVersion": "v1",
+        //    "kind": "Service",
+        //    "metadata": {"name": service_name, "namespace": namespace,"labels":{"pipeline_id": pipeline_prefix}},
+        //    "spec": spec,
+        //}
+        // Prova traefik mesh
         service = {
             "apiVersion": "v1",
             "kind": "Service",
-            "metadata": {"name": service_name, "namespace": namespace,"labels":{"pipeline_id": pipeline_prefix}},
+            "metadata": {
+                "name": service_name,
+                "namespace": namespace,
+                "labels": {
+                    "pipeline_id": pipeline_prefix,
+                    "traefik-mesh.traefik.io/enable": "true"
+                },
+                "annotations": {
+                    # opzionale, utile per debug o tracciamento
+                    "created-by": "pipeline-controller",
+                },
+            },
             "spec": spec,
         }
 
