@@ -120,8 +120,12 @@ def generate_deployments(steps: List[Dict], pipeline_prefix: str, namespace="def
             "image": base_image,
             "imagePullPolicy": "Always",
             "envFrom": [{"configMapRef": {"name": f"{pipeline_prefix}-step-{step_id}"}}],
+            #"env": [
+            #    {"name": "POD_NAMESPACE", "valueFrom": {"fieldRef": {"fieldPath": "metadata.namespace"}}}
+            #],
             "env": [
-                {"name": "POD_NAMESPACE", "valueFrom": {"fieldRef": {"fieldPath": "metadata.namespace"}}}
+                {"name": "POD_NAMESPACE", "valueFrom": {"fieldRef": {"fieldPath": "metadata.namespace"}}},
+                {"name": "SERVICE_PORT", "value": "5000"},
             ],
             "ports": [{"containerPort": 5000}],
         }
