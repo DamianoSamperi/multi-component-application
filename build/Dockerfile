@@ -127,7 +127,7 @@ pip3 install --no-cache-dir -r requirements.txt && \
 pip3 install  pika imageio==2.6.1 imageio-ffmpeg==0.3.0 &&\
 apt remove --purge -y python3-pip cmake ninja-build && \
 apt clean && rm -rf /var/lib/apt/lists/*
-
+ENV USE_LIGHT=false
 # Copy application code
 COPY app.py  /app/
 COPY /steps /app/steps
