@@ -14,6 +14,36 @@ from steps.grayscale import Grayscale
 from steps.deblur import Deblur
 
 app = Flask(__name__)
+from prometheus_client import Counter, Gauge, generate_latest, CONTENT_TYPE_LATEST
+
+http_requests_total = Counter(
+    'http_requests_total',
+    'Numero totale di richieste HTTP ricevute per step',
+    ['method', 'endpoint', 'pipeline_id', 'step_id', 'pod_name']
+)
+
+http_request_in_progress = Gauge(
+    'http_requests_in_progress',
+    'Numero di richieste attualmente in elaborazione per step',
+    ['pipeline_id', 'step_id', 'pod_name']
+)
+import socket
+POD_NAME = os.getenv("POD_NAME", socket.gethostname())
+
+from flask import g
+
+@app.before_request
+def before_request():
+    g.start_time = time.time()
+    http_request_in_progress.labels(PIPELINE_ID, STEP_ID, POD_NAME).inc()
+    http_requests_total.labels(request.method, request.path, PIPELINE_ID, STEP_ID, POD_NAME).inc()
+
+@app.after_request
+def after_request(response):
+    elapsed = time.time() - g.start_time
+    http_request_in_progress.labels(PIPELINE_ID, STEP_ID, POD_NAME).dec()
+    response.headers["X-Elapsed-Time"] = str(elapsed)
+    return responseturn generate_latest(), 200, {'Content-Type': CONTENT_TYPE_LATEST}
 
 # --- Lettura config pipeline da env ---
 pipeline_yaml = os.getenv("PIPELINE_CONFIG", '{"steps":[]}')
