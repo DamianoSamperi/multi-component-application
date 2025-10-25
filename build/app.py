@@ -9,7 +9,13 @@ from kubernetes import client, config as k8s_config
 
 # Importa i tuoi step
 from steps.upscaler import Upscaler
-from steps.classifier import Classifier
+
+USE_LIGHT = os.getenv("USE_LIGHT", "false").lower() == "true"
+
+if USE_LIGHT:
+    from steps.classifier_light import Classifier
+else:
+    from steps.classifier import Classifier
 from steps.grayscale import Grayscale
 from steps.deblur import Deblur
 
