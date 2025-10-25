@@ -168,6 +168,15 @@ def generate_deployments(steps: List[Dict], pipeline_prefix: str, namespace="def
 
         if node_selector:
             deployment_spec["template"]["spec"]["nodeSelector"] = node_selector
+        if str(step_id)==0:
+            deployment_spec["template"]["metadata"] = {
+                                                            "labels": {"app": "nn-service", "step": str(step_id), "pipeline_id": pipeline_prefix},
+                                                            "annotations": {
+                                                                "prometheus.io/scrape": "true",
+                                                                "prometheus.io/port": "5000",
+                                                                "prometheus.io/path": "/metrics",
+                                                            }
+                                                        }
         deployment = {
             "apiVersion": "apps/v1",
             "kind": "Deployment",
