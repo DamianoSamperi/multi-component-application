@@ -153,11 +153,29 @@ def generate_deployments(steps: List[Dict], pipeline_prefix: str, namespace="def
         # NodeSelector
         #node_selector = step.get("nodeSelector")
 
+        # deployment_spec = {
+        #     "replicas": 1,
+        #     "selector": {"matchLabels": {"app": "nn-service", "step": str(step_id), "pipeline_id": pipeline_prefix}},
+        #     "template": {
+        #         "metadata": {"labels": {"app": "nn-service", "step": str(step_id), "pipeline_id": pipeline_prefix}},
+        #         "spec": {
+        #             "schedulerName": "scheduler-plugins-scheduler",
+        #             "containers": [container],
+        #             "volumes": volumes if volumes else [],
+        #         },
+        #     },
+        # }
+        
         deployment_spec = {
             "replicas": 1,
             "selector": {"matchLabels": {"app": "nn-service", "step": str(step_id), "pipeline_id": pipeline_prefix}},
             "template": {
-                "metadata": {"labels": {"app": "nn-service", "step": str(step_id), "pipeline_id": pipeline_prefix}},
+                "metadata": {"labels": {"app": "nn-service", "step": str(step_id), "pipeline_id": pipeline_prefix},
+                            "annotations": {
+                                "prometheus.io/scrape": "true",
+                                "prometheus.io/port": "5000",
+                                "prometheus.io/path": "/metrics",
+                            }},
                 "spec": {
                     "schedulerName": "scheduler-plugins-scheduler",
                     "containers": [container],
@@ -168,15 +186,15 @@ def generate_deployments(steps: List[Dict], pipeline_prefix: str, namespace="def
 
         if node_selector:
             deployment_spec["template"]["spec"]["nodeSelector"] = node_selector
-        if str(step_id)==0:
-            deployment_spec["template"]["metadata"] = {
-                                                            "labels": {"app": "nn-service", "step": str(step_id), "pipeline_id": pipeline_prefix},
-                                                            "annotations": {
-                                                                "prometheus.io/scrape": "true",
-                                                                "prometheus.io/port": "5000",
-                                                                "prometheus.io/path": "/metrics",
-                                                            }
-                                                        }
+        # if str(step_id)==0:
+        #     deployment_spec["template"]["metadata"] = {
+        #                                                     "labels": {"app": "nn-service", "step": str(step_id), "pipeline_id": pipeline_prefix},
+        #                                                     "annotations": {
+        #                                                         "prometheus.io/scrape": "true",
+        #                                                         "prometheus.io/port": "5000",
+        #                                                         "prometheus.io/path": "/metrics",
+        #                                                     }
+        #                                                 }
         deployment = {
             "apiVersion": "apps/v1",
             "kind": "Deployment",
@@ -231,7 +249,7 @@ def create_pipeline():
         v1 = client.CoreV1Api()
         apps_v1 = client.AppsV1Api()
 
-        pipeline_id = f"pipeline-{uuid.uuid4().hex[:8]}"
+        pipeline_id = f"pipeline-{uuid.uuid4().hex[:6]}"
         steps = flatten_steps(pipeline["steps"])
         results = []
         
