@@ -129,7 +129,7 @@ COPY requirements.txt /app/
 RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel && \
     pip3 install --no-cache-dir requests flask pika imageio==2.6.1 imageio-ffmpeg==0.3.0 --index-url https://pypi.org/simple && \
     pip3 install --no-cache-dir -r requirements.txt --index-url https://pypi.org/simple
-
+ENV USE_LIGHT=false
 # --- Application code ---
 COPY app.py /app/
 COPY /steps /app/steps
