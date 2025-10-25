@@ -96,9 +96,9 @@ RUN pip3 install --no-cache-dir tf-keras==2.16.0 "protobuf<5" tensorflow_hub
 #COPY --from=builder /usr/local/gcc-10.1.0 /usr/local/gcc-10.1.0
 COPY --from=builder /root/glslang/build/install /root/glslang/install
 COPY --from=builder /root/realsr-ncnn-vulkan /root/realsr-ncnn-vulkan
-
+ENV USE_LIGHT=true
 # Copy app code
-COPY app_with_tf.py /app/
+COPY app.py /app/
 COPY /steps /app/steps
 ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/lib/aarch64-linux-gnu
 EXPOSE 5000
