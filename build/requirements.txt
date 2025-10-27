@@ -7,3 +7,4 @@ numpy
 requests
 kubernetes
 Pillow
+prometheus_client
