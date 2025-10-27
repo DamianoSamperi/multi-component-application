@@ -1,0 +1,18 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: nn-pipeline
+  namespace: observability
+  labels:
+    release: prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app: nn-service
+  namespaceSelector:
+    matchNames:
+      - default
+  endpoints:
+    - port: "http"
+      path: /metrics
+      interval: 10s
