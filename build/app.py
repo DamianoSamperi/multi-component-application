@@ -49,7 +49,11 @@ def after_request(response):
     elapsed = time.time() - g.start_time
     http_request_in_progress.labels(PIPELINE_ID, STEP_ID, POD_NAME).dec()
     response.headers["X-Elapsed-Time"] = str(elapsed)
-    return responseturn generate_latest(), 200, {'Content-Type': CONTENT_TYPE_LATEST}
+    return response
+
+@app.route("/metrics")
+def metrics():
+    return generate_latest(), 200, {'Content-Type': CONTENT_TYPE_LATEST}
 
 # --- Lettura config pipeline da env ---
 pipeline_yaml = os.getenv("PIPELINE_CONFIG", '{"steps":[]}')
