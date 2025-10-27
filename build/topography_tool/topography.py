@@ -218,19 +218,31 @@ def generate_services(steps: List[Dict], pipeline_prefix: str, namespace="defaul
         service_name = f"{pipeline_prefix}-step-{step_id}"
         spec = {
             "selector": {"app": "nn-service", "step": str(step_id)},
-            "ports": [{"port": 5000, "targetPort": 5000}],
+            "ports": [{"name": "http","port": 5000, "targetPort": 5000}],
         }
         
         if step["id"] == 0:
             spec["type"] = "NodePort"
             spec["ports"] = [{"name": "http", "port": 5000, "targetPort": 5000,"nodePort": 32400}]
+        # service = {
+        #     "apiVersion": "v1",
+        #     "kind": "Service",
+        #     "metadata": {"name": service_name, "namespace": namespace,"labels":{"pipeline_id": pipeline_prefix}},
+        #     "spec": spec,
+        # }
         service = {
             "apiVersion": "v1",
             "kind": "Service",
-            "metadata": {"name": service_name, "namespace": namespace,"labels":{"pipeline_id": pipeline_prefix}},
+            "metadata": {
+                "name": service_name,
+                "namespace": namespace,
+                "labels": {
+                    "pipeline_id": pipeline_prefix,
+                    "app": "nn-service" 
+                }
+            },
             "spec": spec,
         }
-
         services.append(service)
 
     return services
