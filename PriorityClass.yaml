@@ -1,0 +1,16 @@
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: high-qos
+value: 1000
+globalDefault: false
+description: "Alta priorità per carichi intensivi"
+
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: low-qos
+value: 100
+globalDefault: false
+description: "Bassa priorità per pod con bassa richiesta Gpu"
