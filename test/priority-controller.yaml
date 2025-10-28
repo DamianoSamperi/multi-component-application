@@ -1,0 +1,70 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: priority-controller
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: priority-controller-sa
+  namespace: priority-controller
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: priority-controller-role
+  namespace: default
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: priority-controller-rb
+  namespace: default
+subjects:
+  - kind: ServiceAccount
+    name: priority-controller-sa
+    namespace: priority-controller
+roleRef:
+  kind: Role
+  name: priority-controller-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: priority-controller
+  namespace: priority-controller
+  labels:
+    app: priority-controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: priority-controller
+  template:
+    metadata:
+      labels:
+        app: priority-controller
+    spec:
+      serviceAccountName: priority-controller-sa
+      containers:
+        - name: priority-controller
+          image: 192.168.1.252:480/jetson/priority-controller:latest
+          imagePullPolicy: Always
+          env:
+            - name: PROMETHEUS_URL
+              value: "http://prometheus-stack-kube-prometheus-prometheus.observability.svc.cluster.local:9090"
+            - name: PIPELINE_NAMESPACE
+              value: "default"
+            - name: CHECK_INTERVAL
+              value: "30"
+            - name: THRESHOLD_RPS
+              value: "5.0"
+            - name: LOW_PRIORITY_CLASS
+              value: "low-qos"
+            - name: HIGH_PRIORITY_CLASS
+              value: "high-qos"
