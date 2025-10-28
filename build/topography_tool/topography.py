@@ -19,6 +19,7 @@ def flatten_steps(steps: List[Union[Dict, List]]):
                 "params": step.get("params", {}),
                 "gpu": step.get("gpu", False),
                 "volumes": step.get("volumes", []),
+                "priority": step.get("priority",""),
                 "preferred_next": step.get("preferred_next"),
                 #"next_step": next_step,
                 "next_step": step.get("next_step",[]),
@@ -52,6 +53,7 @@ def generate_configmap(step, pipeline_id, namespace="default"):
         "params": step.get("params", {}),
         "gpu": step.get("gpu", False),
         "volumes": step.get("volumes", []),
+        "priority": step.get("priority",""),
         "preferred_next": step.get("preferred_next"),
         "next_step": step.get("next_step", []),
     }
@@ -91,6 +93,7 @@ def generate_configmap(step, pipeline_id, namespace="default"):
                 "params": step.get("params", {}),
                 "gpu": step.get("gpu", False),
                 "volumes": step.get("volumes", []),
+                "priority": step.get("priority",""),
                 "preferred_next": step.get("preferred_next"),
                 "next_step": step.get("next_step", []),
             }, sort_keys=False)
@@ -180,6 +183,7 @@ def generate_deployments(steps: List[Dict], pipeline_prefix: str, namespace="def
                     "schedulerName": "scheduler-plugins-scheduler",
                     "containers": [container],
                     "volumes": volumes if volumes else [],
+                    "priorityClassName": step.get("priority",""),
                 },
             },
         }
