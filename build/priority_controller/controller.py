@@ -61,7 +61,7 @@ def evaluate_priority():
     avg_rps = query_prometheus(query)
 
     if avg_rps is None:
-        print("[WARN] Nessuna metrica disponibile, salto iterazione.")
+        print("[WARN] Nessuna metrica disponibile, salto iterazione.", flush=True)
         return
 
     print(f"[INFO] RPS medio globale: {avg_rps:.2f}", flush=True)
