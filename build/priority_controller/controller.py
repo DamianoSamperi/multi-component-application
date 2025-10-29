@@ -21,7 +21,7 @@ except:
 v1 = client.CoreV1Api()
 apps_v1 = client.AppsV1Api()
 
-print(f"[INFO] Priority Controller avviato - Prometheus={PROM_URL}, Namespace={NAMESPACE}")
+print(f"[INFO] Priority Controller avviato - Prometheus={PROM_URL}, Namespace={NAMESPACE}", flush=True)
 
 def query_prometheus(query: str):
     """Esegue una query Prometheus e restituisce il risultato numerico medio."""
@@ -33,7 +33,7 @@ def query_prometheus(query: str):
             values = [float(r["value"][1]) for r in data["data"]["result"]]
             return sum(values) / len(values)
     except Exception as e:
-        print(f"[WARN] Errore query Prometheus: {e}")
+        print(f"[WARN] Errore query Prometheus: {e}", flush=True)
     return None
 
 def get_all_pipelines():
@@ -52,7 +52,7 @@ def update_configmap_priority(cm_name, new_priority):
 
     cm.data["PIPELINE_CONFIG"] = yaml.dump(data)
     v1.replace_namespaced_config_map(name=cm_name, namespace=NAMESPACE, body=cm)
-    print(f"[UPDATE] ConfigMap {cm_name} aggiornata con priority={new_priority}")
+    print(f"[UPDATE] ConfigMap {cm_name} aggiornata con priority={new_priority}", flush=True)
 
 def evaluate_priority():
     """Analizza le metriche Prometheus e aggiorna priorità."""
@@ -64,7 +64,7 @@ def evaluate_priority():
         print("[WARN] Nessuna metrica disponibile, salto iterazione.")
         return
 
-    print(f"[INFO] RPS medio globale: {avg_rps:.2f}")
+    print(f"[INFO] RPS medio globale: {avg_rps:.2f}", flush=True)
 
     new_priority = HIGH_PRIORITY_CLASS if avg_rps > THRESHOLD_RPS else LOW_PRIORITY_CLASS
 
@@ -77,7 +77,7 @@ def main():
         try:
             evaluate_priority()
         except Exception as e:
-            print(f"[ERROR] Errore nel ciclo principale: {e}")
+            print(f"[ERROR] Errore nel ciclo principale: {e}", flush=True)
         time.sleep(CHECK_INTERVAL)
 
 if __name__ == "__main__":
