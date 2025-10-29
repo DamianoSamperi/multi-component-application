@@ -61,7 +61,7 @@ spec:
             - name: PIPELINE_NAMESPACE
               value: "default"
             - name: CHECK_INTERVAL
-              value: "30"
+              value: "10"
             - name: THRESHOLD_RPS
               value: "5.0"
             - name: LOW_PRIORITY_CLASS
