@@ -131,6 +131,21 @@ def generate_deployments(steps: List[Dict], pipeline_prefix: str, namespace="def
                 {"name": "SERVICE_PORT", "value": "5000"},
             ],
             "ports": [{"containerPort": 5000}],
+            "readinessProbe": {
+                "httpGet": {
+                    "path": "/readyz",
+                    "port": 5000
+                },
+                "initialDelaySeconds": 3,
+                "periodSeconds": 5
+            },
+            "lifecycle": {
+                "preStop": {
+                    "exec": {
+                        "command": ["curl", "-X", "POST", "http://localhost:5000/drain"]
+                    }
+                }
+            },
         }
 
         # GPU
