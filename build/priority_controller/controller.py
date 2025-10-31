@@ -23,6 +23,17 @@ apps_v1 = client.AppsV1Api()
 
 print(f"[INFO] Priority Controller avviato - Prometheus={PROM_URL}, Namespace={NAMESPACE}", flush=True)
 
+def notify_pod_drain(pod_ip):
+    try:
+        url = f"http://{pod_ip}:5000/drain"
+        resp = requests.post(url, timeout=5)
+        if resp.status_code == 200:
+            print(f"[INFO] Pod {pod_ip} in draining")
+        else:
+            print(f"[WARN] Pod {pod_ip} ha risposto {resp.status_code}")
+    except Exception as e:
+        print(f"[WARN] Errore durante notifica drain a {pod_ip}: {e}")
+
 def query_prometheus(query: str):
     """Esegue una query Prometheus e restituisce i risultati come lista di dict."""
     url = f"{PROM_URL}/api/v1/query"
@@ -39,6 +50,11 @@ def get_all_pipelines():
     """Ritorna tutte le configmap con label pipeline_id."""
     cms = v1.list_namespaced_config_map(namespace=NAMESPACE, label_selector="pipeline_id")
     return cms.items
+def get_pods_for_step(pipeline_id, step_id):
+    """Ritorna la lista dei pod per un dato step e pipeline."""
+    label_selector = f"app=nn-service,pipeline_id={pipeline_id},step={step_id}"
+    pods = v1.list_namespaced_pod(namespace=NAMESPACE, label_selector=label_selector)
+    return pods.items
 
 def update_configmap_priority(cm_name, new_priority, step_id):
     """Aggiorna la priority in uno specifico step di una ConfigMap."""
@@ -55,6 +71,11 @@ def update_configmap_priority(cm_name, new_priority, step_id):
         cm.data["PIPELINE_CONFIG"] = yaml.dump(data)
         v1.replace_namespaced_config_map(name=cm_name, namespace=NAMESPACE, body=cm)
         print(f"[UPDATE] ConfigMap {cm_name} aggiornata con priority={new_priority} per step {step_id}", flush=True)
+        # Dopo aver aggiornato la ConfigMap, notifichiamo i pod attivi
+        pods = get_pods_for_step(pipeline_id=cm.metadata.labels["pipeline_id"], step_id=step_id)
+        for pod in pods:
+            if pod.status.pod_ip:
+                notify_pod_drain(pod.status.pod_ip)
 
 def evaluate_priority():
     """Analizza le metriche Prometheus e aggiorna priorità solo per gli step interessati."""
