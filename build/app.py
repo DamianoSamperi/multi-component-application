@@ -3,9 +3,11 @@ import yaml
 import io
 import requests
 import time
-from flask import Flask, request, jsonify
+import socket
+from flask import Flask, request, jsonify, g
 from PIL import Image
 from kubernetes import client, config as k8s_config
+from prometheus_client import Counter, Gauge, generate_latest, CONTENT_TYPE_LATEST
 
 # Importa i tuoi step
 from steps.upscaler import Upscaler
@@ -19,9 +21,21 @@ else:
 from steps.grayscale import Grayscale
 from steps.deblur import Deblur
 
-app = Flask(__name__)
-from prometheus_client import Counter, Gauge, generate_latest, CONTENT_TYPE_LATEST
 
+app = Flask(__name__)
+accepting_requests = True
+
+@app.route("/readyz")
+def readyz():
+    return ("ok", 200) if accepting_requests else ("draining", 503)
+
+@app.route("/drain", methods=["POST"])
+def drain():
+    global accepting_requests
+    accepting_requests = False
+    print("[INFO] Ricevuto comando di draining")
+    return jsonify({"status": "draining"}), 200
+    
 http_requests_total = Counter(
     'http_requests_total',
     'Numero totale di richieste HTTP ricevute per step',
@@ -33,10 +47,8 @@ http_request_in_progress = Gauge(
     'Numero di richieste attualmente in elaborazione per step',
     ['pipeline_id', 'step_id', 'pod_name']
 )
-import socket
 POD_NAME = os.getenv("POD_NAME", socket.gethostname())
 
-from flask import g
 
 @app.before_request
 def before_request():
