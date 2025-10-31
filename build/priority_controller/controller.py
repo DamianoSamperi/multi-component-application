@@ -24,6 +24,7 @@ apps_v1 = client.AppsV1Api()
 
 print(f"[INFO] Priority Controller avviato - Prometheus={PROM_URL}, Namespace={NAMESPACE}", flush=True)
 
+
 def notify_pod_drain(pod_ip):
     try:
         url = f"http://{pod_ip}:5000/drain"
@@ -35,6 +36,14 @@ def notify_pod_drain(pod_ip):
     except Exception as e:
         print(f"[WARN] Errore durante notifica drain a {pod_ip}: {e}")
 
+def wait_for_pod_not_ready(pod_name):
+    """Attende che il pod diventi NotReady."""
+    while True:
+        pod = v1.read_namespaced_pod(pod_name, namespace=NAMESPACE)
+        for cond in pod.status.conditions or []:
+            if cond.type == "Ready" and cond.status == "False":
+                return
+        time.sleep(1)
 def query_prometheus(query: str):
     """Esegue una query Prometheus e restituisce i risultati come lista di dict."""
     url = f"{PROM_URL}/api/v1/query"
@@ -87,6 +96,8 @@ def update_configmap_priority(cm_name, new_priority, step_id):
     updated = False
     for step in data.get("steps", []):
         if step["id"] == step_id:
+            if step["priority"] == new_priority:
+                return
             step["priority"] = new_priority
             updated = True
 
@@ -99,7 +110,8 @@ def update_configmap_priority(cm_name, new_priority, step_id):
         for pod in pods:
             if pod.status.pod_ip:
                 notify_pod_drain(pod.status.pod_ip)
-                restart_deployment_for_step(pipeline_id=cm.metadata.labels["pipeline_id"], step_id=step_id)
+                wait_for_pod_not_ready(pod.metadata.name)
+        restart_deployment_for_step(pipeline_id=cm.metadata.labels["pipeline_id"], step_id=step_id)
 
 
 def evaluate_priority():
