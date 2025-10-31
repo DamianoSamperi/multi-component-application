@@ -3,6 +3,7 @@ import time
 import requests
 import yaml
 from kubernetes import client, config
+from datetime import datetime
 
 # ===== CONFIG =====
 PROM_URL = os.getenv("PROMETHEUS_URL", "http://prometheus.monitoring.svc.cluster.local:9090")
@@ -46,6 +47,28 @@ def query_prometheus(query: str):
         print(f"[WARN] Errore query Prometheus: {e}", flush=True)
     return []
 
+def restart_deployment_for_step(pipeline_id, step_id):
+    deployment_name = f"{pipeline_id}-step-{step_id}"
+    try:
+        apps_v1.patch_namespaced_deployment(
+            name=deployment_name,
+            namespace=NAMESPACE,
+            body={
+                "spec": {
+                    "template": {
+                        "metadata": {
+                            "annotations": {
+                                "restarted-at": datetime.utcnow().isoformat()
+                            }
+                        }
+                    }
+                }
+            }
+        )
+        print(f"[ROLLING] Riavviato deployment {deployment_name} con nuova priority", flush=True)
+    except Exception as e:
+        print(f"[WARN] Impossibile riavviare {deployment_name}: {e}", flush=True)
+        
 def get_all_pipelines():
     """Ritorna tutte le configmap con label pipeline_id."""
     cms = v1.list_namespaced_config_map(namespace=NAMESPACE, label_selector="pipeline_id")
@@ -76,6 +99,8 @@ def update_configmap_priority(cm_name, new_priority, step_id):
         for pod in pods:
             if pod.status.pod_ip:
                 notify_pod_drain(pod.status.pod_ip)
+                restart_deployment_for_step(pipeline_id=cm.metadata.labels["pipeline_id"], step_id=step_id)
+
 
 def evaluate_priority():
     """Analizza le metriche Prometheus e aggiorna priorità solo per gli step interessati."""
