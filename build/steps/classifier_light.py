@@ -5,6 +5,11 @@ import cv2
 from PIL import Image
 import threading
 
+# --- Configura memory growth GPU ---
+gpus = tf.config.experimental.list_physical_devices('GPU')
+for gpu in gpus:
+    tf.config.experimental.set_memory_growth(gpu, True)
+    
 # 🔹 variabile globale condivisa
 _global_net = None
 _model_ready = False
