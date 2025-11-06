@@ -4,15 +4,29 @@ import numpy as np
 import cv2
 from PIL import Image
 
+
+# 🔹 variabile globale condivisa
+_global_net = None
+
 class Classifier:
     def __init__(self, model_name="pednet", threshold=0.5, **kwargs):
-        self.model = hub.load("https://tfhub.dev/tensorflow/ssd_mobilenet_v2/2")
+        global _global_net
+        if _global_net is None:
+            try:
+                print(f"[INFO] Caricamento modello Jetson: {model_name}")
+                _global_net = hub.load("https://tfhub.dev/tensorflow/ssd_mobilenet_v2/2")
+            except Exception as e:
+                print(f"[ERROR] Errore nell'inizializzazione del modello: {e}")
+                _global_net = None
+        else:
+            print(f"[INFO] Riutilizzo modello Jetson già caricato: {model_name}")
+        self.net = _global_net
         self.threshold = threshold
 
     def run(self, image: Image.Image):
         np_img = np.array(image)
         input_tensor = tf.convert_to_tensor([np_img], dtype=tf.uint8)
-        outputs = self.model(input_tensor)
+        outputs = self.net(input_tensor)
 
         boxes = outputs["detection_boxes"][0].numpy()
         scores = outputs["detection_scores"][0].numpy()
