@@ -38,7 +38,8 @@ class Upscaler:
         while attempt < self.max_retries:
             with gpu_lock:
                 try:
-                    subprocess.run(cmd, check=True, timeout=1000, capture_output=True)
+                    #subprocess.run(cmd, check=True, timeout=1000, capture_output=True)
+                    subprocess.run(cmd, check=True, timeout=1000, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                     break  # success, esce dal ciclo
                 except subprocess.CalledProcessError as e:
                     stderr = e.stderr.decode(errors="ignore") if e.stderr else ""
