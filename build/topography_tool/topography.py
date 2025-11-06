@@ -150,7 +150,9 @@ def generate_deployments(steps: List[Dict], pipeline_prefix: str, namespace="def
 
         # GPU
         if step.get("gpu", False):
-            container["resources"] = {"limits": {"nvidia.com/gpu.shared": 1}}
+            container["resources"] = {"requests": {"memory": "512Mi"},"limits": {"nvidia.com/gpu.shared": 1 ,  "memory": "768Mi"}}
+        else
+            container["resources"] = {"requests": {"memory": "512Mi"},"limits": {"memory": "768Mi"}}
 
         # Volumes
         volume_mounts = []
