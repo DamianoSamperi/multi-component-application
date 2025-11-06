@@ -4,17 +4,25 @@ import numpy as np
 import cv2
 from PIL import Image
 
+# 🔹 variabile globale condivisa
+_global_net = None
+
 class Classifier:
     def __init__(self, model_name="pednet", threshold=0.5, **kwargs):
-        """
-        model_name: nome del modello Jetson Inference
-        threshold: soglia di confidenza per la rilevazione
-        """
-        try:
-            self.net = detectNet(model_name, [f"--threshold={threshold}"])
-        except Exception as e:
-            print(f"[ERROR] Errore nell'inizializzazione del modello: {e}")
-            self.net = None
+        global _global_net
+
+        if _global_net is None:
+            try:
+                print(f"[INFO] Caricamento modello Jetson: {model_name}")
+                _global_net = detectNet(model_name, [f"--threshold={threshold}"])
+            except Exception as e:
+                print(f"[ERROR] Errore nell'inizializzazione del modello: {e}")
+                _global_net = None
+        else:
+            print(f"[INFO] Riutilizzo modello Jetson già caricato: {model_name}")
+
+        self.net = _global_net
+        self.threshold = threshold
 
     def run(self, image):
         if self.net is None:
@@ -54,6 +62,10 @@ class Classifier:
             print(f"[ERROR] Errore durante il disegno dei bounding box: {e}")
 
         try:
+                    # Libera esplicitamente le risorse CUDA
+            del cuda_img
+            import gc
+            gc.collect()
             return Image.fromarray(cv2.cvtColor(np_img, cv2.COLOR_BGR2RGB))
         except Exception as e:
             print(f"[ERROR] Errore nella conversione finale in PIL: {e}")
