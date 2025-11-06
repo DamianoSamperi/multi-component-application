@@ -26,7 +26,7 @@ def load_model(model_url="https://tfhub.dev/tensorflow/ssd_mobilenet_v2/fpnlite_
 threading.Thread(target=load_model, daemon=True).start()
 
 class Classifier:
-    # def __init__(self, model_name="pednet", threshold=0.5, **kwargs):
+    def __init__(self, model_name="pednet", threshold=0.5, **kwargs):
     #     global _global_net
     #     if _global_net is None:
     #         try:
