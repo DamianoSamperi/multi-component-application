@@ -13,7 +13,7 @@ from prometheus_client import Counter, Gauge, generate_latest, CONTENT_TYPE_LATE
 from steps.upscaler import Upscaler
 
 USE_LIGHT = os.getenv("USE_LIGHT", "false").lower() == "true"
-
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 if USE_LIGHT:
     from steps.classifier_light import Classifier
 else:
