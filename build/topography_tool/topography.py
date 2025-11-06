@@ -136,8 +136,9 @@ def generate_deployments(steps: List[Dict], pipeline_prefix: str, namespace="def
                     "path": "/readyz",
                     "port": 5000
                 },
-                "initialDelaySeconds": 3,
-                "periodSeconds": 5
+                "initialDelaySeconds": 15,  # aspetta 15s prima della prima verifica
+                "periodSeconds": 5,          # riprova ogni 5s
+                "failureThreshold": 6        # considera non pronto dopo 6 fallimenti consecutivi
             },
             "lifecycle": {
                 "preStop": {
