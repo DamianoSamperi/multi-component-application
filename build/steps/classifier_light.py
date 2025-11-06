@@ -14,7 +14,7 @@ class Classifier:
         if _global_net is None:
             try:
                 print(f"[INFO] Caricamento modello Jetson: {model_name}")
-                _global_net = hub.load("https://tfhub.dev/tensorflow/ssd-mobilenet-v2/tensorFlow2/fpnlite-320x320")
+                _global_net = hub.load("https://tfhub.dev/tensorflow/ssd_mobilenet_v2/fpnlite_320x320/1")
             except Exception as e:
                 print(f"[ERROR] Errore nell'inizializzazione del modello: {e}")
                 _global_net = None
