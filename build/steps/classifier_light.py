@@ -3,30 +3,51 @@ import tensorflow_hub as hub
 import numpy as np
 import cv2
 from PIL import Image
-
+import threading
 
 # 🔹 variabile globale condivisa
 _global_net = None
+_model_ready = False
+
+def load_model(model_url="https://tfhub.dev/tensorflow/ssd_mobilenet_v2/fpnlite_320x320/1"):
+    """Carica il modello in background."""
+    global _global_net, _model_ready
+    try:
+        print(f"[INFO] Avvio caricamento modello da {model_url}")
+        _global_net = hub.load(model_url)
+        _model_ready = True
+        print("[INFO] Modello pronto")
+    except Exception as e:
+        print(f"[ERROR] Errore caricamento modello: {e}")
+        _global_net = None
+        _model_ready = False
+
+# Avvio thread al modulo import
+threading.Thread(target=load_model, daemon=True).start()
 
 class Classifier:
-    def __init__(self, model_name="pednet", threshold=0.5, **kwargs):
-        global _global_net
-        if _global_net is None:
-            try:
-                print(f"[INFO] Caricamento modello Jetson: {model_name}")
-                _global_net = hub.load("https://tfhub.dev/tensorflow/ssd_mobilenet_v2/fpnlite_320x320/1")
-            except Exception as e:
-                print(f"[ERROR] Errore nell'inizializzazione del modello: {e}")
-                _global_net = None
-        else:
-            print(f"[INFO] Riutilizzo modello Jetson già caricato: {model_name}")
-        self.net = _global_net
+    # def __init__(self, model_name="pednet", threshold=0.5, **kwargs):
+    #     global _global_net
+    #     if _global_net is None:
+    #         try:
+    #             print(f"[INFO] Caricamento modello Jetson: {model_name}")
+    #             _global_net = hub.load("https://tfhub.dev/tensorflow/ssd_mobilenet_v2/fpnlite_320x320/1")
+    #         except Exception as e:
+    #             print(f"[ERROR] Errore nell'inizializzazione del modello: {e}")
+    #             _global_net = None
+    #     else:
+    #         print(f"[INFO] Riutilizzo modello Jetson già caricato: {model_name}")
+    #     self.net = _global_net
         self.threshold = threshold
 
     def run(self, image: Image.Image):
+        global _global_net, _model_ready
+
+        if not _model_ready or _global_net is None:
+            raise RuntimeError("Modello non ancora pronto")
         np_img = np.array(image)
         input_tensor = tf.convert_to_tensor([np_img], dtype=tf.uint8)
-        outputs = self.net(input_tensor)
+        outputs = _global_net(input_tensor)
 
         boxes = outputs["detection_boxes"][0].numpy()
         scores = outputs["detection_scores"][0].numpy()
