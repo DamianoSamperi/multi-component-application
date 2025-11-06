@@ -5,7 +5,7 @@ import cv2
 from PIL import Image
 
 class Classifier:
-    def __init__(self, threshold=0.5):
+    def __init__(self, model_name="pednet", threshold=0.5, **kwargs):
         self.model = hub.load("https://tfhub.dev/tensorflow/ssd_mobilenet_v2/2")
         self.threshold = threshold
 
