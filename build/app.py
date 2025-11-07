@@ -8,6 +8,7 @@ from flask import Flask, request, jsonify, g
 from PIL import Image
 from kubernetes import client, config as k8s_config
 from prometheus_client import Counter, Gauge, generate_latest, CONTENT_TYPE_LATEST
+import traceback
 
 # Importa i tuoi step
 from steps.upscaler import Upscaler
@@ -106,31 +107,35 @@ if current_step_conf:
 
 @app.route("/process", methods=["POST"])
 def process():
-    image_file = request.files["image"]
-    image = Image.open(image_file).convert("RGB")
+    try:
+        image_file = request.files["image"]
+        image = Image.open(image_file).convert("RGB")
+        
+        # ⏱️ misura tempo step
+        start_time = time.time()
+        for step in pipeline:
+            image = step.run(image)
+        elapsed = time.time() - start_time
+        
+        # Header custom con il tempo di questo step
+        step_header = {f"X-Step-{STEP_ID}-Time": str(elapsed)}
     
-    # ⏱️ misura tempo step
-    start_time = time.time()
-    for step in pipeline:
-        image = step.run(image)
-    elapsed = time.time() - start_time
+        # 2️⃣ Determina il prossimo step dalla config
+        next_steps = current_step_conf.get("next_step", None)
+        if not next_steps:
+            # Ultimo step → restituisci output al client
+            output = io.BytesIO()
+            image.save(output, format="JPEG")
+            output.seek(0)
+            headers = {"Content-Type": "image/jpeg", **step_header}
+            return output.read(), 200, headers
     
-    # Header custom con il tempo di questo step
-    step_header = {f"X-Step-{STEP_ID}-Time": str(elapsed)}
-
-    # 2️⃣ Determina il prossimo step dalla config
-    next_steps = current_step_conf.get("next_step", None)
-    if not next_steps:
-        # Ultimo step → restituisci output al client
-        output = io.BytesIO()
-        image.save(output, format="JPEG")
-        output.seek(0)
-        headers = {"Content-Type": "image/jpeg", **step_header}
-        return output.read(), 200, headers
-
-    if isinstance(next_steps, (str, int)):
-        next_steps = [next_steps]
-
+        if isinstance(next_steps, (str, int)):
+            next_steps = [next_steps]
+    except Exception as e:
+        print(f"[ERROR] /process: {e}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
     # 3️⃣ Carica config Kubernetes e verifica ConfigMap della pipeline
     try:
         k8s_config.load_incluster_config()
@@ -141,6 +146,8 @@ def process():
             label_selector=f"pipeline_id={PIPELINE_ID}"
         )
     except Exception as e:
+        print(f"[ERROR] /process: {e}")
+        traceback.print_exc()
         return jsonify({"error": f"Errore API Kubernetes: {e}"}), 500
 
     #active_steps = set()
@@ -162,6 +169,8 @@ def process():
                     active_steps.add(str(step_id))
                     logging.info(f"Step ID {step_id} aggiunto da ConfigMap {cm.metadata.name}")
         except Exception as e:
+            print(f"[ERROR] /process: {e}")
+            traceback.print_exc()
             logging.error(f"Errore nel processare ConfigMap {cm.metadata.name}: {e}")
 
 
@@ -203,6 +212,8 @@ def process():
         #return r.content, r.status_code, r.headers.items()
         return r.content, r.status_code, combined_headers.items()
     except Exception as e:
+        print(f"[ERROR] /process: {e}")
+        traceback.print_exc()
         return jsonify({"error": f"Errore invio a step {chosen_next}: {e}"}), 500    
 
 
