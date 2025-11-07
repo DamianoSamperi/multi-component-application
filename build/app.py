@@ -10,11 +10,11 @@ from kubernetes import client, config as k8s_config
 from prometheus_client import Counter, Gauge, generate_latest, CONTENT_TYPE_LATEST
 import traceback
 
-# Importa i tuoi step
-from steps.upscaler import Upscaler
 
 USE_LIGHT = os.getenv("USE_LIGHT", "false").lower() == "true"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+# Importa i tuoi step
+#from steps.upscaler import Upscaler
 #if USE_LIGHT:
 #    from steps.classifier_light import Classifier
 #else:
@@ -22,36 +22,6 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 #from steps.grayscale import Grayscale
 #from steps.deblur import Deblur
 
-# --- Registro dinamico dei componenti ---
-available_steps = {}
-
-# Scansiona la configurazione e importa solo gli step usati in questa pipeline
-for step_conf in config.get("steps", []):
-    step_type = step_conf.get("type")
-
-    # Evita duplicati
-    if step_type in available_steps:
-        continue
-
-    if step_type == "upscaling":
-        from steps.upscaler import Upscaler
-        available_steps["upscaling"] = Upscaler
-
-    elif step_type == "grayscale":
-        from steps.grayscale import Grayscale
-        available_steps["grayscale"] = Grayscale
-
-    elif step_type == "deblur":
-        from steps.deblur import Deblur
-        available_steps["deblur"] = Deblur
-
-    elif step_type == "detection":
-        USE_LIGHT = os.getenv("USE_LIGHT", "false").lower() == "true"
-        if USE_LIGHT:
-            from steps.classifier_light import Classifier
-        else:
-            from steps.classifier import Classifier
-        available_steps["detection"] = Classifier
 
 
 app = Flask(__name__)
@@ -120,6 +90,37 @@ STEP_ID = int(config.get("step_id", 0))
 #    "grayscale": Grayscale,
 #    "deblur": Deblur,
 #}
+
+# --- Registro dinamico dei componenti ---
+available_steps = {}
+
+# Scansiona la configurazione e importa solo gli step usati in questa pipeline
+for step_conf in config.get("steps", []):
+    step_type = step_conf.get("type")
+
+    # Evita duplicati
+    if step_type in available_steps:
+        continue
+
+    if step_type == "upscaling":
+        from steps.upscaler import Upscaler
+        available_steps["upscaling"] = Upscaler
+
+    elif step_type == "grayscale":
+        from steps.grayscale import Grayscale
+        available_steps["grayscale"] = Grayscale
+
+    elif step_type == "deblur":
+        from steps.deblur import Deblur
+        available_steps["deblur"] = Deblur
+
+    elif step_type == "detection":
+        USE_LIGHT = os.getenv("USE_LIGHT", "false").lower() == "true"
+        if USE_LIGHT:
+            from steps.classifier_light import Classifier
+        else:
+            from steps.classifier import Classifier
+        available_steps["detection"] = Classifier
 
 # Recupero configurazione di questo step
 current_step_conf = None
