@@ -15,12 +15,43 @@ from steps.upscaler import Upscaler
 
 USE_LIGHT = os.getenv("USE_LIGHT", "false").lower() == "true"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-if USE_LIGHT:
-    from steps.classifier_light import Classifier
-else:
-    from steps.classifier import Classifier
-from steps.grayscale import Grayscale
-from steps.deblur import Deblur
+#if USE_LIGHT:
+#    from steps.classifier_light import Classifier
+#else:
+#    from steps.classifier import Classifier
+#from steps.grayscale import Grayscale
+#from steps.deblur import Deblur
+
+# --- Registro dinamico dei componenti ---
+available_steps = {}
+
+# Scansiona la configurazione e importa solo gli step usati in questa pipeline
+for step_conf in config.get("steps", []):
+    step_type = step_conf.get("type")
+
+    # Evita duplicati
+    if step_type in available_steps:
+        continue
+
+    if step_type == "upscaling":
+        from steps.upscaler import Upscaler
+        available_steps["upscaling"] = Upscaler
+
+    elif step_type == "grayscale":
+        from steps.grayscale import Grayscale
+        available_steps["grayscale"] = Grayscale
+
+    elif step_type == "deblur":
+        from steps.deblur import Deblur
+        available_steps["deblur"] = Deblur
+
+    elif step_type == "detection":
+        USE_LIGHT = os.getenv("USE_LIGHT", "false").lower() == "true"
+        if USE_LIGHT:
+            from steps.classifier_light import Classifier
+        else:
+            from steps.classifier import Classifier
+        available_steps["detection"] = Classifier
 
 
 app = Flask(__name__)
@@ -83,12 +114,12 @@ PIPELINE_ID = config.get("pipeline_id")  # viene letto dalla ConfigMap
 STEP_ID = int(config.get("step_id", 0))
 
 # Registro i componenti disponibili
-available_steps = {
-    "upscaling": Upscaler,
-    "detection": Classifier,
-    "grayscale": Grayscale,
-    "deblur": Deblur,
-}
+#available_steps = {
+#    "upscaling": Upscaler,
+#    "detection": Classifier,
+#    "grayscale": Grayscale,
+#    "deblur": Deblur,
+#}
 
 # Recupero configurazione di questo step
 current_step_conf = None
