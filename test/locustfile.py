@@ -9,7 +9,7 @@ import requests
 # ===============================
 # 🔹 CONFIGURAZIONE
 # ===============================
-PROM_URL = "http://prometheus-stack-kube-prom-prometheus.observability.svc.cluster.local:9090"
+PROM_URL = "http://192.168.1.251:30090"
 CACHE_TTL = 5  # secondi di cache per le metriche Prometheus
 
 # ===============================
