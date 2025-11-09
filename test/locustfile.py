@@ -236,7 +236,7 @@ class PipelineUser(HttpUser):
                         resp.success()
                         for step, elapsed in step_times.items():
                             # step es. "X-Step-0-Time"
-                            step_idx = int(step.split("-")[1])
+                            step_idx = int(step.split("-")[2])
                             node_ip = None
                             for k in STEP_NODE_MAP:
                                if k.startswith(f"{step_idx}-"):
