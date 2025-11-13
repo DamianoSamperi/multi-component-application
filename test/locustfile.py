@@ -34,15 +34,29 @@ log_file.flush()
 # PROMETHEUS HELPERS
 # ===================================
 _last_metrics = {"time": 0, "gpu": {}, "http": {}}
-def measure_gpu_average(node_ip, duration, interval=0.5):
-    values = []
-    start = time.time()
-    while time.time() - start < duration:
-        gpu_dict, _ = get_metrics_cached()
-        val = gpu_dict.get(node_ip, 0)
-        values.append(val)
-        time.sleep(interval)
-    return sum(values)/len(values) if values else 0
+# def measure_gpu_average(node_ip, duration, interval=0.5):
+#     values = []
+#     start = time.time()
+#     while time.time() - start < duration:
+#         gpu_dict, _ = get_metrics_cached()
+#         val = gpu_dict.get(node_ip, 0)
+#         values.append(val)
+#         time.sleep(interval)
+#     return sum(values)/len(values) if values else 0
+def measure_gpu_average_for_step(node_ip, elapsed):
+    if not node_ip:
+        return 0
+    query = f'avg_over_time(gpu_usage_percentage{{instance="{node_ip}:9401"}}[{int(elapsed)}s])'
+    try:
+        r = requests.get(f"{PROM_URL}/api/v1/query", params={"query": query}, timeout=2)
+        r.raise_for_status()
+        result = r.json().get("data", {}).get("result", [])
+        if result:
+            return float(result[0]["value"][1])
+        return 0
+    except Exception as e:
+        print(f"⚠️ Errore query Prometheus GPU avg_over_time: {e}")
+        return 0
 
 def query_gpu_usage_per_node():
     """
@@ -166,6 +180,9 @@ print("Mappa step -> nodo:", STEP_NODE_MAP)
 # ===================================
 @events.request.add_listener
 def log_request(request_type, name, response_time, response_length, exception, **kwargs):
+    # if request_type == "POST" and "step-0" in name:
+    #     return
+
     gpu_usage_dict, http_dict = get_metrics_cached()
 
     # Estrai l'indice dello step se nome come "X-Step-5-Time"
@@ -207,7 +224,7 @@ def log_request(request_type, name, response_time, response_length, exception, *
     ])
     log_file.flush()
 
-# ==================================
+# ===================================
 # LOCUST TASK
 # ===================================
 class PipelineUser(HttpUser):
@@ -234,28 +251,50 @@ class PipelineUser(HttpUser):
                             k: float(v) for k, v in resp.headers.items() if k.startswith("X-Step-")
                         }
                         resp.success()
-                        for step, elapsed in step_times.items():
-                            # step es. "X-Step-0-Time"
-                            step_idx = int(step.split("-")[2])
-                            node_ip = None
-                            for k in STEP_NODE_MAP:
-                               if k.startswith(f"{step_idx}-"):
-                                  node_ip = STEP_NODE_MAP[k]
-                                  step_name = f"step-{step_idx}"
-                                  break
-                            # calcolo GPU media durante l'elaborazione
-                            gpu_avg = measure_gpu_average(node_ip, elapsed) if node_ip else 0
 
+                        for step, elapsed in step_times.items():
+                            # Estrai indice dello step
+                            try:
+                                step_idx = int(step.split("-")[2])
+                            except ValueError:
+                                continue
+
+                            # Trova il node_ip corrispondente
+                            node_ip = None
+                            step_name = f"step-{step_idx}"
+                            for k in STEP_NODE_MAP:
+                                if k.startswith(f"{step_idx}-"):
+                                    node_ip = STEP_NODE_MAP[k]
+                                    break
+
+                            # Calcola GPU media solo se node_ip disponibile
+                            gpu_avg = 0
+                            if node_ip:
+                                interval = max(1, int(elapsed))  # almeno 1s
+                                query = f'avg_over_time(gpu_usage_percentage{{instance="{node_ip}:9401"}}[{interval}s])'
+                                #print(f"📢 Query Prometheus GPU per {step_name}: {query} (durata step: {elapsed:.2f}s)")
+                                try:
+                                    r = requests.get(f"{PROM_URL}/api/v1/query", params={"query": query}, timeout=2)
+                                    r.raise_for_status()
+                                    result = r.json().get("data", {}).get("result", [])
+                                    if result:
+                                        gpu_avg = float(result[0]["value"][1])
+                                except Exception as e:
+                                    print(f"⚠️ Errore query Prometheus GPU avg_over_time: {e}")
+                                    gpu_avg = 0  # fallback
+
+                            # Fire evento Locust
                             events.request.fire(
                                 request_type="STEP",
-                                name=step_name,
-                                response_time=elapsed * 1000,  # ms
+                                name=step,
+                                response_time=elapsed * 1000,
                                 response_length=0,
                                 exception=None,
-                                context={"gpu_usage": gpu_avg, "node_ip": node_ip},
+                                context={"gpu_average": gpu_avg, "node_ip": node_ip}
                             )
                     else:
                         resp.failure(f"Errore {resp.status_code}")
+
 
 # ===================================
 # OPTIONAL: CUSTOM LOAD SHAPE
