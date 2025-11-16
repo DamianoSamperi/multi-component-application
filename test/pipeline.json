@@ -34,7 +34,7 @@
         "step_id": 2,
         "type": "grayscale",
         "params": {},
-        "gpu": 0,
+        "gpu": 1,
         "nodeSelector": {"kubernetes.io/hostname": "nano93"},
         "volumes": ["cuda", "lib"],
         "priority": "low-qos"
@@ -45,7 +45,7 @@
         "params": {
           "radius": 2
         },
-        "gpu": 0,
+        "gpu": 1,
         "nodeSelector": {"kubernetes.io/hostname": "nano94"},
         "volumes": ["cuda", "lib"],
         "priority": "low-qos"
