@@ -9,7 +9,7 @@
         "scale_factor": 4,
         "tta": false
       },
-      "gpu": true,
+      "gpu": 1,
       "nodeSelector": {"kubernetes.io/hostname": "jetsonorigin"},
       "volumes": ["cuda", "lib"],
       "priority": "high-qos"
@@ -24,7 +24,7 @@
         "threshold": 0.5
       },
       "preferred_next": 2,
-      "gpu": true,
+      "gpu": 1,
       "nodeSelector": {"kubernetes.io/hostname": "nano92"},
       "volumes": ["cuda", "lib", "jetson-inference"],
       "priority": "low-qos"
@@ -34,7 +34,7 @@
         "step_id": 2,
         "type": "grayscale",
         "params": {},
-        "gpu": true,
+        "gpu": 0,
         "nodeSelector": {"kubernetes.io/hostname": "nano93"},
         "volumes": ["cuda", "lib"],
         "priority": "low-qos"
@@ -45,7 +45,7 @@
         "params": {
           "radius": 2
         },
-        "gpu": true,
+        "gpu": 0,
         "nodeSelector": {"kubernetes.io/hostname": "nano94"},
         "volumes": ["cuda", "lib"],
         "priority": "low-qos"
