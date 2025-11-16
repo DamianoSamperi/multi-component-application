@@ -18,10 +18,10 @@ def load_model(model_url="https://tfhub.dev/tensorflow/ssd_mobilenet_v2/fpnlite_
     """Carica il modello in background."""
     global _global_net, _model_ready
     try:
-        print(f"[INFO] Avvio caricamento modello da {model_url}")
+        print(f"[INFO] Avvio caricamento modello da {model_url}",flush=True)
         _global_net = hub.load(model_url)
         _model_ready = True
-        print("[INFO] Modello pronto")
+        print("[INFO] Modello pronto", flush=True)
     except Exception as e:
         print(f"[ERROR] Errore caricamento modello: {e}")
         _global_net = None
