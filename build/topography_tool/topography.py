@@ -17,7 +17,7 @@ def flatten_steps(steps: List[Union[Dict, List]]):
                 "id": step["step_id"],
                 "type": step["type"],
                 "params": step.get("params", {}),
-                "gpu": step.get("gpu", False),
+                "gpu": int(step.get("gpu", 0)),
                 "volumes": step.get("volumes", []),
                 "priority": step.get("priority",""),
                 "preferred_next": step.get("preferred_next"),
@@ -51,7 +51,7 @@ def generate_configmap(step, pipeline_id, namespace="default"):
         "id": step["id"],
         "type": step["type"],
         "params": step.get("params", {}),
-        "gpu": step.get("gpu", False),
+        "gpu": step.get("gpu", 0),
         "volumes": step.get("volumes", []),
         "priority": step.get("priority",""),
         "preferred_next": step.get("preferred_next"),
@@ -91,7 +91,7 @@ def generate_configmap(step, pipeline_id, namespace="default"):
                 "step_id": step["id"],
                 "type": step["type"],
                 "params": step.get("params", {}),
-                "gpu": step.get("gpu", False),
+                "gpu": int(step.get("gpu", 0)),
                 "volumes": step.get("volumes", []),
                 "priority": step.get("priority",""),
                 "preferred_next": step.get("preferred_next"),
@@ -150,8 +150,10 @@ def generate_deployments(steps: List[Dict], pipeline_prefix: str, namespace="def
         }
 
         # GPU
-        if step.get("gpu", False):
-            container["resources"] = {"requests": {"memory": "512Mi"},"limits": {"nvidia.com/gpu.shared": 1 ,  "memory": "2Gi"}}
+        gpu_count = int(step.get("gpu", 0))
+
+        if gpu_count > 0:
+            container["resources"] = {"requests": {"memory": "512Mi","nvidia.com/gpu.shared": gpu_count},"limits": {"nvidia.com/gpu.shared":  gpu_count ,  "memory": "2Gi"}}
         else:
             container["resources"] = {"requests": {"memory": "512Mi"},"limits": {"memory": "768Mi"}}
 
