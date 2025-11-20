@@ -40,9 +40,7 @@ FROM nvcr.io/nvidia/l4t-base:r36.2.0
 #FROM dustynv/l4t-pytorch:r36.2.0
 WORKDIR /app
 ENV DEBIAN_FRONTEND=noninteractive
-#ENV PATH=/usr/local/gcc-10.1.0/bin:$PATH
-#ENV LD_LIBRARY_PATH=/usr/local/gcc-10.1.0/lib64:$LD_LIBRARY_PATH
-#ENV LD_LIBRARY_PATH=/usr/local/gcc-10.1.0/lib64
+
 
 
 # System dependencies
