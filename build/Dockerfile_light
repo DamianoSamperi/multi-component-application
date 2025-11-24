@@ -129,7 +129,7 @@ pip3 install  pika imageio==2.6.1 imageio-ffmpeg==0.3.0 &&\
 apt remove --purge -y python3-pip cmake ninja-build && \
 apt clean && rm -rf /var/lib/apt/lists/*
 
-RUN pip3 install --no-cache-dir tf-keras==2.16.0 "protobuf<5" tensorflow_hub
+#RUN pip3 install --no-cache-dir tf-keras==2.16.0 "protobuf<5" tensorflow_hub
 
 
 ENV USE_LIGHT=true
