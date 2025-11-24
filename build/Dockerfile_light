@@ -87,12 +87,10 @@ FROM nvcr.io/nvidia/l4t-tensorflow:r32.6.1-tf2.5-py3
 WORKDIR /app
 ENV DEBIAN_FRONTEND=noninteractive
 
-
-# System dependencies
-RUN apt-get update && apt-get install -y \
-    python3-pip python3-dev libjpeg-dev libpng-dev libglib2.0-0 \
-    libsm6 libxext6 libxrender-dev libopenblas-dev git\
-    && rm -rf /var/lib/apt/lists/*
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libsm6 libxext6 libxrender-dev ffmpeg libvulkan-dev python3-pip python3-dev \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Copy GCC toolchain from builder
 COPY --from=builder /usr/local/gcc-10.1.0 /usr/local/gcc-10.1.0
