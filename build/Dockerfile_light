@@ -120,17 +120,18 @@ ENV OPENBLAS_CORETYPE=ARMV8
 
 COPY requirements.txt /app/
 
-RUN pip3 install --no-cache-dir --upgrade pip && \
-    pip3 install --no-cache-dir --index-url https://pypi.org/simple --ignore-installed -r requirements.txt && \
-    pip3 install --no-cache-dir --index-url https://pypi.org/simple pillow opencv-python-headless
-# RUN pip3 uninstall -y numpy || true && \
-#     pip3 install --no-cache-dir "numpy<2"
+RUN apt update && apt install --no-install-recommends -y python3-pip python3-dev build-essential cmake ninja-build && pip3 install --upgrade pip && pip3 install requests flask pika && \
+apt-get install -y python3-opencv && \
+#opencv-python-headless && \
+pip3 install --upgrade pip setuptools wheel && \
+pip3 install --no-cache-dir -r requirements.txt && \
+pip3 install  pika imageio==2.6.1 imageio-ffmpeg==0.3.0 &&\
+apt remove --purge -y python3-pip cmake ninja-build && \
+apt clean && rm -rf /var/lib/apt/lists/*
 
 RUN pip3 install --no-cache-dir tf-keras==2.16.0 "protobuf<5" tensorflow_hub
 
-# Copy custom binaries from builder
-COPY --from=builder /root/glslang/build/install /root/glslang/install
-COPY --from=builder /root/realsr-ncnn-vulkan /root/realsr-ncnn-vulkan
+
 ENV USE_LIGHT=true
 # Copy app code
 COPY app.py /app/
