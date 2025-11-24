@@ -74,16 +74,11 @@ RUN git clone https://github.com/KhronosGroup/glslang.git && \
     cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$(pwd)/install" .. && \
     make -j$(nproc) install
 
+
+# Build realsr-ncnn-vulkan (upscaler)
 RUN git clone https://github.com/nihui/realsr-ncnn-vulkan.git && \
     cd realsr-ncnn-vulkan && git submodule update --init --recursive && \
-    # rimuovo BF16 file sorgente
-    rm -f src/ncnn/src/layer/arm/cast_arm_bf16.cpp && \
-    # neutralizzo chiamate a funzioni bf16 in cast_arm.cpp
-    sed -i '/cast_fp32_to_bf16_neon/d' src/ncnn/src/layer/arm/cast_arm.cpp && \
-    sed -i '/cast_bf16_to_fp32_neon/d' src/ncnn/src/layer/arm/cast_arm.cpp && \
-    mkdir build && cd build && cmake -DNCNN_BF16=OFF -DNCNN_ARM82=OFF -DNCNN_ARM82DOT=OFF ../src && \
-    cmake --build . -j$(nproc)
-
+    mkdir build && cd build && cmake ../src && cmake --build . -j$(nproc)
 
 ###########################################
 # Stage 2: Runtime
