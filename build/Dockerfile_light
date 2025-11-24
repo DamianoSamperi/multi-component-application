@@ -93,13 +93,29 @@ WORKDIR /app
 ENV DEBIAN_FRONTEND=noninteractive
 
 
-
 # System dependencies
 RUN apt-get update && apt-get install -y \
     python3-pip python3-dev libjpeg-dev libpng-dev libglib2.0-0 \
     libsm6 libxext6 libxrender-dev libopenblas-dev git\
     && rm -rf /var/lib/apt/lists/*
 
+# Copy GCC toolchain from builder
+COPY --from=builder /usr/local/gcc-10.1.0 /usr/local/gcc-10.1.0
+COPY --from=builder /usr/bin/gcc /usr/bin/gcc
+COPY --from=builder /usr/bin/g++ /usr/bin/g++
+# Add libexec so gcc può trovare cc1/cc1plus
+ENV PATH=/usr/local/gcc-10.1.0/bin:$PATH \
+    LD_LIBRARY_PATH=/usr/local/gcc-10.1.0/lib64:$LD_LIBRARY_PATH
+
+# Copy realsr-ncnn-vulkan built binaries
+COPY --from=builder /root/realsr-ncnn-vulkan /root/realsr-ncnn-vulkan
+
+# Copy glslang if needed
+COPY --from=builder /root/glslang/build/install /root/glslang/install
+
+# Set Python environment
+ENV PYTHONIOENCODING=utf-8
+ENV OPENBLAS_CORETYPE=ARMV8
 
 
 COPY requirements.txt /app/
