@@ -126,6 +126,7 @@ apt remove --purge -y python3-pip cmake ninja-build && \
 apt clean && rm -rf /var/lib/apt/lists/*
 
 #RUN pip3 install --no-cache-dir tf-keras==2.16.0 "protobuf<5" tensorflow_hub
+RUN apt-get update && apt-get install -y python3-opencv libopencv-dev
 
 # Remove any accidental pip OpenCV
 RUN pip3 uninstall -y opencv-python opencv-python-headless opencv-contrib-python || true && \
