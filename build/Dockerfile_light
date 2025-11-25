@@ -138,7 +138,10 @@ apt clean && rm -rf /var/lib/apt/lists/*
 
 # Remove any accidental pip OpenCV
 RUN pip3 uninstall -y opencv-python opencv-python-headless opencv-contrib-python || true 
-
+COPY --from=builder /usr/local/share/OpenCV /usr/local/share/OpenCV
+COPY --from=builder /usr/local/lib /usr/local/lib
+COPY --from=builder /usr/local/include /usr/local/include
+RUN ldconfig
 ENV USE_LIGHT=true
 # Copy app code
 COPY app.py /app/
