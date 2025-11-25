@@ -98,7 +98,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Install ONLY system OpenCV (NO pip OpenCV!)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libsm6 libxext6 libxrender-dev ffmpeg libvulkan-dev python3-opencv python3-pip python3-dev \
+    libsm6 libxext6 libxrender-dev ffmpeg libvulkan-dev python3-pip python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Force OpenCV to load system version
@@ -126,7 +126,6 @@ ENV OPENBLAS_CORETYPE=ARMV8
 COPY requirements.txt /app/
 
 RUN apt update && apt install --no-install-recommends -y python3-pip python3-dev build-essential cmake ninja-build && pip3 install --upgrade pip && pip3 install requests flask pika && \
-#apt-get install -y python3-opencv && \
 #opencv-python-headless && \
 pip3 install --upgrade pip setuptools wheel && \
 pip3 install --no-cache-dir -r requirements.txt && \
