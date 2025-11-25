@@ -130,7 +130,8 @@ apt clean && rm -rf /var/lib/apt/lists/*
 # Remove any accidental pip OpenCV
 RUN pip3 uninstall -y opencv-python opencv-python-headless opencv-contrib-python || true && \
     rm -rf /usr/local/lib/python3.6/dist-packages/cv2*
-RUN git clone -b 3.4.18 https://github.com/opencv/opencv.git && \
+RUN apt-get update && apt-get install -y --no-install-recommends git &&\
+    git clone -b 3.4.18 https://github.com/opencv/opencv.git && \
     git clone -b 3.4.18 https://github.com/opencv/opencv_contrib.git && \
     mkdir -p opencv/build && cd opencv/build && \
     cmake -DOPENCV_EXTRA_MODULES_PATH=../../opencv_contrib/modules \
