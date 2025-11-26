@@ -51,6 +51,7 @@ class Classifier:
         if not _model_ready or _global_net is None:
             raise RuntimeError("Modello non ancora pronto")
         np_img = np.array(image)
+        np_img = cv2.cvtColor(np_img, cv2.COLOR_RGB2BGR)
         input_tensor = tf.convert_to_tensor([np_img], dtype=tf.uint8)
         outputs = _global_net(input_tensor)
 
@@ -66,5 +67,6 @@ class Classifier:
                 cv2.rectangle(np_img, (x1, y1), (x2, y2), (0,255,0), 2)
                 cv2.putText(np_img, f"{label}:{score:.2f}", (x1, y1-10),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 2)
-
-        return Image.fromarray(np_img)
+        np_img = cv2.cvtColor(np_img, cv2.COLOR_BGR2RGB)
+    
+        return Image.fromarray(np_img.astype(np.uint8))
