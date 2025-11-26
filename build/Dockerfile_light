@@ -97,7 +97,13 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libsm6 libxext6 libxrender-dev ffmpeg libvulkan-dev python3-pip python3-dev \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
-
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libhdf5-serial-dev \
+    hdf5-tools \
+    liblapack-dev \
+    libblas-dev \
+    gfortran && \
+    pip3 install h5py==2.10.0
 RUN pip3 uninstall -y tensorflow tensorflow-cpu tensorflow-gpu || true && \
     pip3 install --no-cache-dir https://developer.download.nvidia.com/compute/redist/jp/v46/tensorflow/tensorflow-1.15.5+nv21.12-cp36-cp36m-linux_aarch64.whl
 RUN pip3 install --no-cache-dir tf-keras==2.16.0 "protobuf<5" tensorflow_hub
