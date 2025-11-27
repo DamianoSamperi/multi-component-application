@@ -4,8 +4,7 @@ import numpy as np
 import cv2
 from PIL import Image
 import threading
-tf.config.run_functions_eagerly(True)
-
+tf.compat.v1.enable_eager_execution()
 # --- Configura memory growth GPU ---
 gpus = tf.config.experimental.list_physical_devices('GPU')
 for gpu in gpus:
@@ -13,49 +12,43 @@ for gpu in gpus:
     
 # 🔹 variabile globale condivisa
 _global_net = None
+_graph = None
 _model_ready = False
 
-def load_model(model_url="https://tfhub.dev/tensorflow/ssd_mobilenet_v2/fpnlite_320x320/1"):
-    """Carica il modello in background."""
-    global _global_net, _model_ready
+ef load_model(model_url="https://tfhub.dev/tensorflow/ssd_mobilenet_v2/fpnlite_320x320/1"):
+    """Load model asynchronously and capture graph."""
+    global _global_net, _graph, _model_ready
+    
+    print("[INFO] Loading TF model async...")
     try:
-        print(f"[INFO] Avvio caricamento modello da {model_url}",flush=True)
-        _global_net = hub.load(model_url)
+        model = hub.load(model_url)
+        _global_net = model
+        _graph = tf.compat.v1.get_default_graph()
         _model_ready = True
-        print("[INFO] Modello pronto", flush=True)
+        print("[INFO] Model loaded successfully.")
     except Exception as e:
-        print(f"[ERROR] Errore caricamento modello: {e}")
-        _global_net = None
-        _model_ready = False
+        print(f"[ERROR] Model load failed: {e}")
 
-# Avvio thread al modulo import
+# Start background loading so Flask doesn't block startup
 threading.Thread(target=load_model, daemon=True).start()
 
 class Classifier:
-    def __init__(self, model_name="pednet", threshold=0.5, **kwargs):
-    #     global _global_net
-    #     if _global_net is None:
-    #         try:
-    #             print(f"[INFO] Caricamento modello Jetson: {model_name}")
-    #             _global_net = hub.load("https://tfhub.dev/tensorflow/ssd_mobilenet_v2/fpnlite_320x320/1")
-    #         except Exception as e:
-    #             print(f"[ERROR] Errore nell'inizializzazione del modello: {e}")
-    #             _global_net = None
-    #     else:
-    #         print(f"[INFO] Riutilizzo modello Jetson già caricato: {model_name}")
-    #     self.net = _global_net
+    def __init__(self, threshold=0.5):
         self.threshold = threshold
 
     def run(self, image: Image.Image):
-        global _global_net, _model_ready
-
-        if not _model_ready or _global_net is None:
-            raise RuntimeError("Modello non ancora pronto")
-        np_img = np.array(image, dtype=np.uint8)
-        input_tensor = tf.expand_dims(np_img, axis=0)  
-        input_tensor = tf.convert_to_tensor(input_tensor, dtype=tf.uint8)
+        global _global_net, _model_ready, _graph
         
-        outputs = _global_net(input_tensor)
+        if not _model_ready:
+            raise RuntimeError("Model not ready yet")
+
+        np_img = np.array(image, dtype=np.uint8)
+        np_img = cv2.cvtColor(np_img, cv2.COLOR_RGB2BGR)
+        input_tensor = tf.expand_dims(np_img, 0)  # shape: (1, h, w, 3)
+
+        # ensure same graph context
+        with _graph.as_default():
+            outputs = _global_net(input_tensor)
 
         boxes = outputs["detection_boxes"][0].numpy()
         scores = outputs["detection_scores"][0].numpy()
@@ -66,8 +59,9 @@ class Classifier:
             if score >= self.threshold:
                 y1, x1, y2, x2 = box
                 x1, y1, x2, y2 = int(x1*w), int(y1*h), int(x2*w), int(y2*h)
-                cv2.rectangle(np_img, (x1, y1), (x2, y2), (0,255,0), 2)
+                cv2.rectangle(np_img, (x1, y1), (x2, y2), (0, 255, 0), 2)
                 cv2.putText(np_img, f"{label}:{score:.2f}", (x1, y1-10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 2)
-    
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
+        np_img = cv2.cvtColor(np_img, cv2.COLOR_BGR2RGB)
         return Image.fromarray(np_img)
