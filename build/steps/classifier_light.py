@@ -15,7 +15,7 @@ _global_net = None
 _graph = None
 _model_ready = False
 
-ef load_model(model_url="https://tfhub.dev/tensorflow/ssd_mobilenet_v2/fpnlite_320x320/1"):
+def load_model(model_url="https://tfhub.dev/tensorflow/ssd_mobilenet_v2/fpnlite_320x320/1"):
     """Load model asynchronously and capture graph."""
     global _global_net, _graph, _model_ready
     
