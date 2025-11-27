@@ -27,10 +27,22 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 app = Flask(__name__)
 accepting_requests = True
 
+# @app.route("/readyz")
+# def readyz():
+#     return ("ok", 200) if accepting_requests else ("draining", 503)
 @app.route("/readyz")
 def readyz():
-    return ("ok", 200) if accepting_requests else ("draining", 503)
+    # se lo step corrente ha l'attributo `ready`, controllalo
+    step_ready = True
+    if pipeline and hasattr(pipeline[0], "ready"):
+        step_ready = pipeline[0].ready
 
+    if accepting_requests and step_ready:
+        return "ok", 200
+    elif not step_ready:
+        return "loading", 503
+    else:
+        return "draining", 503
 @app.route("/drain", methods=["POST"])
 def drain():
     global accepting_requests
