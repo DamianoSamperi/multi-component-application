@@ -33,7 +33,7 @@ def load_model(model_url="https://tfhub.dev/tensorflow/ssd_mobilenet_v2/fpnlite_
 threading.Thread(target=load_model, daemon=True).start()
 
 class Classifier:
-    def __init__(self, threshold=0.5):
+    def __init__(self, model_name="pednet",threshold=0.5, **kwargs):
         self.threshold = threshold
 
     def run(self, image: Image.Image):
