@@ -4,6 +4,7 @@ import numpy as np
 import cv2
 from PIL import Image
 import threading
+tf.config.run_functions_eagerly(True)
 
 # --- Configura memory growth GPU ---
 gpus = tf.config.experimental.list_physical_devices('GPU')
