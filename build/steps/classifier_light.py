@@ -39,6 +39,9 @@ threading.Thread(target=load_model, daemon=True).start()
 class Classifier:
     def __init__(self, model_name="pednet",threshold=0.5, **kwargs):
         self.threshold = threshold
+    @property
+    def ready(self):
+        return _model_ready 
     def run(self, image: Image.Image):
         global _global_infer_fn, _model_ready
 
