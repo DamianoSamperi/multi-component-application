@@ -94,58 +94,19 @@ RUN rm -rf /jetson-inference/docs /jetson-inference/build /usr/local/lib/python3
 WORKDIR /app
 ## INSTALL TENSORFLOW
 # Install runtime dependencies
-#RUN apt-get update && apt-get install -y --no-install-recommends \
-#    libsm6 libxext6 libxrender-dev ffmpeg libvulkan-dev python3-pip python3-dev \
-#    && apt-get clean && rm -rf /var/lib/apt/lists/*
-#RUN apt-get update && apt-get install -y --no-install-recommends \
-#    libhdf5-serial-dev \
-#    hdf5-tools \
-#    liblapack-dev \
-#    libblas-dev \
-#    gfortran && \
-#    pip3 install h5py==2.10.0
-#RUN pip3 uninstall -y tensorflow tensorflow-cpu tensorflow-gpu || true && \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libsm6 libxext6 libxrender-dev ffmpeg libvulkan-dev python3-pip python3-dev \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libhdf5-serial-dev \
+    hdf5-tools \
+    liblapack-dev \
+    libblas-dev \
+    gfortran && \
+    pip3 install h5py==2.10.0
+RUN pip3 uninstall -y tensorflow tensorflow-cpu tensorflow-gpu || true && \
 #    pip3 install --no-cache-dir https://developer.download.nvidia.com/compute/redist/jp/v46/tensorflow/tensorflow-1.15.5+nv21.12-cp36-cp36m-linux_aarch64.whl
-#RUN pip3 install --no-cache-dir "protobuf<4" tensorflow_hub==0.7.0
-# Install system dependencies
-RUN apt-get update && apt-get upgrade -y && \
-    apt-get install -y \
-        python3 \
-        python3-pip \
-        python3-setuptools \
-        wget \
-        curl \
-        gfortran \
-        libhdf5-dev \
-        libc-ares-dev \
-        libeigen3-dev \
-        libatlas-base-dev \
-        libopenblas-dev \
-        libblas-dev \
-        liblapack-dev
-
-# Remove old TensorFlow if present
-RUN pip3 uninstall -y tensorflow || true
-
-# Install Python dependencies step-by-step (as requested)
-RUN pip3 install --no-cache-dir \
-        Cython==0.29.21 \
-        h5py==2.10.0 \
-        testresources \
-        numpy \
-        --upgrade setuptools && \
-    pip3 install --no-cache-dir \
-        pybind11 protobuf google-pasta && \
-    pip3 install --no-cache-dir \
-        six mock wheel requests gast && \
-    pip3 install --no-cache-dir \
-        keras_applications --no-deps && \
-    pip3 install --no-cache-dir \
-        keras_preprocessing --no-deps && \
-    pip3 install --no-cache-dir gdown==3.12.2
-# Download TensorFlow wheel
-RUN wget https://github.com/lhelontra/tensorflow-on-arm/releases/download/v2.4.0/tensorflow-2.4.0-cp35-none-linux_aarch64.whl -O tensorflow.whl
-RUN pip3 install tensorflow.whl && rm tensorflow.whl && tensorflow_hub
+RUN pip3 install --no-cache-dir "protobuf<4" tensorflow_hub==0.7.0
 
 # Copy GCC toolchain from builder
 COPY --from=builder /usr/local/gcc-10.1.0 /usr/local/gcc-10.1.0
