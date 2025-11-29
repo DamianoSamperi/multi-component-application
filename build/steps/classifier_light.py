@@ -21,9 +21,9 @@ def load_model():
     print("[INFO] Loading TF model async...")
     try:
         resolved_path = hub.resolve(model_url)
-        print(f"URL valido, modello scaricabile in: {resolved_path}")
+        print(f"URL valido, modello scaricabile in: {resolved_path}", flush=True)
     except Exception as e:
-        print(f"URL non valido: {e}")
+        print(f"URL non valido: {e}", flush=True)
     try:
         model = hub.load(model_url)
 
@@ -34,9 +34,9 @@ def load_model():
 
         _global_infer_fn = infer_fn
         _model_ready = True
-        print("[INFO] Model loaded successfully.")
+        print("[INFO] Model loaded successfully.", flush=True)
     except Exception as e:
-        print(f"[ERROR] Model load failed: {e}")
+        print(f"[ERROR] Model load failed: {e}", flush=True)
         
 # Start background ing so Flask doesn't block startup
 threading.Thread(target=load_model, daemon=True).start()
