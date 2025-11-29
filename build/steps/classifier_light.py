@@ -17,7 +17,7 @@ _model_ready = False
 def load_model():
     """Load model async and store a callable inference function."""
     global _global_infer_fn, _model_ready
-    model_url="https://tfhub.dev/google/object_detection/mobile_object_localizer_v1/1"
+    model_url="https://tfhub.dev/tensorflow/ssd_mobilenet_v1/fpn_640x640/1"
     print("[INFO] Loading TF model async...")
     try:
         resolved_path = hub.resolve(model_url)
@@ -25,12 +25,12 @@ def load_model():
     except Exception as e:
         print(f"URL non valido: {e}", flush=True)
     try:
-        #model = hub.load(model_url)
-        model = hub.Module(model_url)
+        model = hub.load(model_url)
         # Wrap inference in a tf.function to safely call from any thread
-        @tf.function
-        def infer_fn(input_tensor):
-            return model(input_tensor)
+        # @tf.function
+        # def infer_fn(input_tensor):
+        #     return model(input_tensor)
+        infer = model.signatures["default"]
 
         _global_infer_fn = infer_fn
         _model_ready = True
