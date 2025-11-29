@@ -14,10 +14,10 @@ for gpu in gpus:
 _global_infer_fn = None
 _model_ready = False
 
-def load_model(model_url="https://tfhub.dev/tensorflow/ssd_mobilenet_v2/fpnlite_320x320/1"):
+def load_model():
     """Load model async and store a callable inference function."""
     global _global_infer_fn, _model_ready
-    model_url="https://tfhub.dev/tensorflow/efficientdet/lite0/detection/1"
+    model_url="https://tfhub.dev/google/imagenet/mobilenet_v3_small_075_224/classification/5"
     print("[INFO] Loading TF model async...")
     try:
         model = hub.load(model_url)
@@ -33,7 +33,7 @@ def load_model(model_url="https://tfhub.dev/tensorflow/ssd_mobilenet_v2/fpnlite_
     except Exception as e:
         print(f"[ERROR] Model load failed: {e}")
         
-# Start background loading so Flask doesn't block startup
+# Start background ing so Flask doesn't block startup
 threading.Thread(target=load_model, daemon=True).start()
 
 class Classifier:
