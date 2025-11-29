@@ -144,7 +144,7 @@ RUN pip3 install --no-cache-dir \
         keras_preprocessing --no-deps && \
     pip3 install --no-cache-dir gdown==3.12.2
 # Download TensorFlow wheel
-RUN wget https://github.com/lhelontra/tensorflow-on-arm/releases/download/v2.4.0/tensorflow-2.4.0-cp37-none-linux_aarch64.whl -O tensorflow.whl
+RUN wget https://github.com/lhelontra/tensorflow-on-arm/releases/download/v2.4.0/tensorflow-2.4.0-cp35-none-linux_aarch64.whl -O tensorflow.whl
 RUN pip3 install tensorflow.whl && rm tensorflow.whl && tensorflow_hub
 
 # Copy GCC toolchain from builder
