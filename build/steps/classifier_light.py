@@ -20,6 +20,11 @@ def load_model():
     model_url="https://tfhub.dev/tensorflow/efficientdet/lite0/detection/1"
     print("[INFO] Loading TF model async...")
     try:
+        resolved_path = hub.resolve(model_url)
+        print(f"URL valido, modello scaricabile in: {resolved_path}")
+    except Exception as e:
+        print(f"URL non valido: {e}")
+    try:
         model = hub.load(model_url)
 
         # Wrap inference in a tf.function to safely call from any thread
