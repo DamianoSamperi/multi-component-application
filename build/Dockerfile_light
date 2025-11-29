@@ -144,7 +144,7 @@ RUN pip3 install --no-cache-dir \
         keras_preprocessing --no-deps && \
     pip3 install --no-cache-dir gdown==3.12.2
 # Download TensorFlow wheel
-RUN gdown https://drive.google.com/uc?id=1DLk4Tjs8Mjg919NkDnYg02zEnbbCAzOz --output tensorflow.whl
+RUN gdown -- fuzzy "https://drive.google.com/file/d/1Kn-nTk2QgbF5PNNxdtcvzN_9bYtb125t/view?usp=sharing" --output tensorflow.whl
 
 # Install the downloaded TensorFlow wheel
 RUN pip3 install tensorflow.whl && rm tensorflow.whl && tensorflow_hub
