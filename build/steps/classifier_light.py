@@ -25,8 +25,8 @@ def load_model():
     except Exception as e:
         print(f"URL non valido: {e}", flush=True)
     try:
-        model = hub.load(model_url)
-
+        #model = hub.load(model_url)
+        model = hub.Module(model_url)
         # Wrap inference in a tf.function to safely call from any thread
         @tf.function
         def infer_fn(input_tensor):
@@ -59,6 +59,7 @@ class Classifier:
 
         # Use the pre-built tf.function for thread-safe inference
         outputs = _global_infer_fn(input_tensor)
+        print(outputs.keys())
 
         boxes = outputs["detection_boxes"][0].numpy()
         scores = outputs["detection_scores"][0].numpy()
