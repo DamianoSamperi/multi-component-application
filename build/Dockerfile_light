@@ -142,7 +142,7 @@ RUN pip3 install --no-cache-dir \
         keras_applications --no-deps && \
     pip3 install --no-cache-dir \
         keras_preprocessing --no-deps && \
-    pip3 install --no-cache-dir gdown==3.12.2
+    pip3 install --no-cache-dir gdown
 # Download TensorFlow wheel
 RUN gdown --fuzzy "https://drive.google.com/file/d/1Kn-nTk2QgbF5PNNxdtcvzN_9bYtb125t/view?usp=sharing" -O tensorflow.whl
 
