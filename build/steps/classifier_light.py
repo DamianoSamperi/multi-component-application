@@ -17,7 +17,7 @@ _model_ready = False
 def load_model():
     """Load model async and store a callable inference function."""
     global _global_infer_fn, _model_ready
-    model_url="https://tfhub.dev/tensorflow/efficientdet/lite0/detection/1"
+    model_url="https://tfhub.dev/google/openimages_v4/ssd/mobilenet_v2/1"
     print("[INFO] Loading TF model async...")
     try:
         resolved_path = hub.resolve(model_url)
