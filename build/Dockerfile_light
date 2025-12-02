@@ -106,7 +106,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     pip3 install h5py==2.10.0
 #RUN pip3 uninstall -y tensorflow tensorflow-cpu tensorflow-gpu || true 
 #    pip3 install --no-cache-dir https://developer.download.nvidia.com/compute/redist/jp/v46/tensorflow/tensorflow-1.15.5+nv21.12-cp36-cp36m-linux_aarch64.whl
-RUN pip3 install --no-cache-dir "protobuf<4" tensorflow_hub==0.7.0
+RUN pip3 install --no-cache-dir "protobuf<4"
+RUN pip3 install --no-cache-dir tensorflow_hub==0.7.0
 
 # Copy GCC toolchain from builder
 COPY --from=builder /usr/local/gcc-10.1.0 /usr/local/gcc-10.1.0
