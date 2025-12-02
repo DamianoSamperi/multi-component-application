@@ -27,9 +27,9 @@ def load_model():
     try:
         model = hub.load(model_url)
         # Wrap inference in a tf.function to safely call from any thread
-         @tf.function
-         def infer_fn(input_tensor):
-             return model(input_tensor)
+        @tf.function
+        def infer_fn(input_tensor):
+            return model(input_tensor)
 
         _global_infer_fn = infer_fn
         _model_ready = True
