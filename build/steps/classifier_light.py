@@ -64,7 +64,7 @@ class Classifier:
 
         # Use the pre-built tf.function for thread-safe inference
         outputs = _global_infer_fn(input_tensor)
-        print(outputs.keys())
+        #print(outputs.keys())
 
         boxes = outputs["detection_boxes"][0].numpy()
         scores = outputs["detection_scores"][0].numpy()
