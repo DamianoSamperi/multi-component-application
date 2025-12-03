@@ -53,8 +53,14 @@ class Classifier:
             raise RuntimeError("Model not ready yet")
 
         np_img = np.array(image, dtype=np.uint8)
-        np_img = cv2.cvtColor(np_img, cv2.COLOR_RGB2BGR)
-        input_tensor = tf.expand_dims(np_img, 0)  # (1,H,W,3)
+        #np_img = cv2.cvtColor(np_img, cv2.COLOR_RGB2BGR)
+        h_orig, w_orig = np_img.shape[:2]
+        # Riduco alla resolution del modello: 320x320
+        target_w, target_h = 320, 320
+        h_orig, w_orig = np_img.shape[:2]
+        np_resized = cv2.resize(np_img, (target_w, target_h))
+        
+        input_tensor = tf.expand_dims(np_resized, 0)  # (1,H,W,3)
 
         # Use the pre-built tf.function for thread-safe inference
         outputs = _global_infer_fn(input_tensor)
@@ -64,14 +70,26 @@ class Classifier:
         scores = outputs["detection_scores"][0].numpy()
         classes = outputs["detection_classes"][0].numpy().astype(np.int32)
 
-        h, w, _ = np_img.shape
+        np_draw = cv2.cvtColor(np_img, cv2.COLOR_RGB2BGR)
         for box, score, label in zip(boxes, scores, classes):
-            if score >= self.threshold:
-                y1, x1, y2, x2 = box
-                x1, y1, x2, y2 = int(x1*w), int(y1*h), int(x2*w), int(y2*h)
-                cv2.rectangle(np_img, (x1, y1), (x2, y2), (0,255,0), 2)
-                cv2.putText(np_img, f"{label}:{score:.2f}", (x1, y1-10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 2)
+            if score < self.threshold:
+                continue
+            y1, x1, y2, x2 = box  # normalized [0,1]
+            x1 = int(x1 * w_orig)
+            x2 = int(x2 * w_orig)
+            y1 = int(y1 * h_orig)
+            y2 = int(y2 * h_orig)
 
-        np_img = cv2.cvtColor(np_img, cv2.COLOR_BGR2RGB)
-        return Image.fromarray(np_img)
+            cv2.rectangle(np_draw, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.putText(
+                np_draw,
+                f"{label}:{score:.2f}",
+                (x1, max(y1 - 10, 0)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                (0, 255, 0),
+                2,
+            )
+
+        np_rgb = cv2.cvtColor(np_draw, cv2.COLOR_BGR2RGB)
+        return Image.fromarray(np_rgb)
