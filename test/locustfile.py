@@ -343,10 +343,10 @@ if USE_SHAPE:
     @events.init.add_listener
     def _(environment, **kwargs):
         global CURVE_TYPE, CURVE_USERS, CURVE_DURATION, CURVE_SPAWN_RATE
-        CURVE_TYPE = env.parsed_options.curve
-        CURVE_USERS = env.parsed_options.curve_users
-        CURVE_DURATION = env.parsed_options.curve_duration
-        CURVE_SPAWN_RATE = env.parsed_options.curve_spawn_rate
+        CURVE_TYPE = environment.parsed_options.curve
+        CURVE_USERS = environment.parsed_options.curve_users
+        CURVE_DURATION = environment.parsed_options.curve_duration
+        CURVE_SPAWN_RATE = environment.parsed_options.curve_spawn_rate
 
     class CustomShape(LoadTestShape):
         def tick(self):
