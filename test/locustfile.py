@@ -270,20 +270,43 @@ class PipelineUser(HttpUser):
 def export_locust_stats(environment, **_kwargs):
     print("📊 Esporto metriche Locust...")
 
-    # JSON completo
+    # --------- JSON AGGREGATO PRINCIPALE ---------
     with open("locust_stats.json", "w") as f:
         try:
-            stats_history = environment.stats.serialize_stats_history()
-        except:
-            stats_history = {}  # versioni più vecchie non lo implementano
-        
-        json.dump(stats_history, f, cls=MinimalJSONEncoder, indent=2)
+            # versioni recenti di Locust
+            stats = environment.stats.serialize_stats()
+        except AttributeError:
+            # fallback per versioni più vecchie
+            stats = {
+                "entries": [
+                    {
+                        "name": s.name,
+                        "method": s.method,
+                        "num_requests": s.num_reqs,
+                        "num_failures": s.num_failures,
+                        "avg_response_time": s.avg_response_time,
+                        "min_response_time": s.min_response_time,
+                        "max_response_time": s.max_response_time,
+                        "median_response_time": s.median_response_time,
+                        "p95": s.get_response_time_percentile(0.95),
+                        "rps": s.total_rps,
+                    }
+                    for s in environment.stats.entries.values()
+                ]
+            }
 
-    # Storia tempi
+        json.dump(stats, f, cls=MinimalJSONEncoder, indent=2)
+
+    # --------- STORIA TEMPORALE (SE SUPPORTATA) ---------
     with open("locust_times.json", "w") as f:
-        json.dump(environment.stats.serialize_stats_history(), f, cls=StatsJSONEncoder, indent=2)
+        try:
+            history = environment.stats.serialize_stats_history()
+        except AttributeError:
+            history = {}  # la tua versione di Locust non la supporta
 
-    # CSV aggregato
+        json.dump(history, f, cls=MinimalJSONEncoder, indent=2)
+
+    # --------- CSV AGGREGATO ---------
     with open("locust_summary.csv", "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow([
