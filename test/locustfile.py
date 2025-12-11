@@ -270,74 +270,98 @@ class PipelineUser(HttpUser):
 def export_locust_stats(environment, **_kwargs):
     print("📊 Esporto metriche Locust...")
 
-    # --------- JSON AGGREGATO PRINCIPALE ---------
-    with open("locust_stats.json", "w") as f:
+    # --------- LEGGI STATISTICHE IN MANIERA UNIVERSALE ---------
+    stats_entries = []
+    for s in environment.stats.entries.values():
+        
+        # ---- num_requests compatibile ----
+        num_requests = getattr(s, "num_requests", getattr(s, "num_reqs", 0))
+
+        # ---- tempi pre-calcolati (se esistono) ----
+        avg = getattr(s, "avg_response_time", None)
+        min_rt = getattr(s, "min_response_time", None)
+        max_rt = getattr(s, "max_response_time", None)
+        median = getattr(s, "median_response_time", None)
+
+        # ---- calcola p95 manuale ----
+        p95 = 0
         try:
-            # versioni recenti di Locust
-            stats = environment.stats.serialize_stats()
-        except AttributeError:
-            # fallback per versioni più vecchie
-            stats = {}
+            p95 = s.get_response_time_percentile(0.95)
+        except:
+            # fallback: calcola p95 a mano dai bucket
+            if hasattr(s, "response_times"):
+                # costruiamo lista di valori grezzi
+                expanded = []
+                for t, count in s.response_times.items():
+                    expanded += [float(t)] * int(count)
+                if expanded:
+                    expanded.sort()
+                    p95 = expanded[int(len(expanded)*0.95)]
 
-        json.dump(stats, f, cls=MinimalJSONEncoder, indent=2)
+        # ---- calcola Avg manuale se necessario ----
+        if avg is None:
+            total_rt = getattr(s, "total_response_time", 0)
+            avg = total_rt / num_requests if num_requests > 0 else 0
 
-    # --------- STORIA TEMPORALE (SE SUPPORTATA) ---------
-    with open("locust_times.json", "w") as f:
-        try:
-            history = environment.stats.serialize_stats_history()
-        except AttributeError:
-            history = {}  # la tua versione non lo implementa
+        # ---- calcola Median manuale se necessario ----
+        if median is None and hasattr(s, "response_times"):
+            expanded = []
+            for t, count in s.response_times.items():
+                expanded += [float(t)] * int(count)
+            if expanded:
+                expanded.sort()
+                median = expanded[len(expanded) // 2]
+            else:
+                median = 0
 
-        json.dump(history, f, cls=MinimalJSONEncoder, indent=2)
+        # ---- calcola Min/Max manuale ----
+        if min_rt is None and hasattr(s, "response_times"):
+            times = [float(t) for t in s.response_times.keys()]
+            min_rt = min(times) if times else 0
+        
+        if max_rt is None and hasattr(s, "response_times"):
+            times = [float(t) for t in s.response_times.keys()]
+            max_rt = max(times) if times else 0
 
-    # --------- CSV AGGREGATO COMPATIBILE ---------
+        # ---- calcolo RPS manuale ----
+        rps = 0
+        if hasattr(s, "num_reqs_per_sec"):
+            # media su tutta la durata del test
+            rps = sum(s.num_reqs_per_sec.values()) / len(s.num_reqs_per_sec.values())
+
+        stats_entries.append({
+            "name": getattr(s, "name", ""),
+            "method": getattr(s, "method", "-"),
+            "requests": num_requests,
+            "failures": getattr(s, "num_failures", 0),
+            "avg": avg,
+            "min": min_rt,
+            "max": max_rt,
+            "median": median,
+            "p95": p95,
+            "rps": rps
+        })
+
+    # --------- SALVA CSV COMPATIBILE ---------
     with open("locust_summary.csv", "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow([
             "name", "method", "requests", "failures",
-            "avg", "min", "max", "median", "p95", "rps"
+            "avg_ms", "min_ms", "max_ms", "median_ms", "p95_ms", "rps"
         ])
 
-        for s in environment.stats.entries.values():
-            # compat per nome dei campi tra versioni diverse
-            # num_requests / num_reqs
-            num_requests = getattr(s, "num_requests", None)
-            if num_requests is None:
-                num_requests = getattr(s, "num_reqs", 0)
-
-            # num_failures / num_failures (stesso nome di solito)
-            num_failures = getattr(s, "num_failures", 0)
-
-            avg_response_time = getattr(s, "avg_response_time", 0)
-            min_response_time = getattr(s, "min_response_time", 0)
-            max_response_time = getattr(s, "max_response_time", 0)
-            median_response_time = getattr(s, "median_response_time", 0)
-
-            # total_rps / current_rps / rps
-            rps = getattr(s, "total_rps",
-                  getattr(s, "current_rps",
-                  getattr(s, "rps", 0)))
-
-            try:
-                p95 = s.get_response_time_percentile(0.95)
-            except Exception:
-                p95 = 0
-
+        for e in stats_entries:
             writer.writerow([
-                getattr(s, "name", ""),
-                getattr(s, "method", ""),
-                num_requests,
-                num_failures,
-                avg_response_time,
-                min_response_time,
-                max_response_time,
-                median_response_time,
-                p95,
-                rps,
+                e["name"], e["method"], e["requests"], e["failures"],
+                round(e["avg"], 3),
+                round(e["min"], 3),
+                round(e["max"], 3),
+                round(e["median"], 3),
+                round(e["p95"], 3),
+                round(e["rps"], 3),
             ])
 
-    print("📁 Salvati: locust_stats.json, locust_times.json, locust_summary.csv")
-
+    print("📁 Salvato: locust_summary.csv (versione compatibile)")
 
 # ===================================
 # RPS REALTIME LOGGING
