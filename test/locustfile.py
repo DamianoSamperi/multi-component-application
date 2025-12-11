@@ -341,7 +341,7 @@ if USE_SHAPE:
         parser.add_argument("--curve-spawn-rate", type=float, default=CURVE_SPAWN_RATE)
 
     @events.init.add_listener
-    def _(env, **_):
+    def _(environment, **kwargs)::
         global CURVE_TYPE, CURVE_USERS, CURVE_DURATION, CURVE_SPAWN_RATE
         CURVE_TYPE = env.parsed_options.curve
         CURVE_USERS = env.parsed_options.curve_users
