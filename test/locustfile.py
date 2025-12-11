@@ -277,23 +277,7 @@ def export_locust_stats(environment, **_kwargs):
             stats = environment.stats.serialize_stats()
         except AttributeError:
             # fallback per versioni più vecchie
-            stats = {
-                "entries": [
-                    {
-                        "name": s.name,
-                        "method": s.method,
-                        "num_requests": s.num_reqs,
-                        "num_failures": s.num_failures,
-                        "avg_response_time": s.avg_response_time,
-                        "min_response_time": s.min_response_time,
-                        "max_response_time": s.max_response_time,
-                        "median_response_time": s.median_response_time,
-                        "p95": s.get_response_time_percentile(0.95),
-                        "rps": s.total_rps,
-                    }
-                    for s in environment.stats.entries.values()
-                ]
-            }
+            stats = {}
 
         json.dump(stats, f, cls=MinimalJSONEncoder, indent=2)
 
@@ -302,32 +286,58 @@ def export_locust_stats(environment, **_kwargs):
         try:
             history = environment.stats.serialize_stats_history()
         except AttributeError:
-            history = {}  # la tua versione di Locust non la supporta
+            history = {}  # la tua versione non lo implementa
 
         json.dump(history, f, cls=MinimalJSONEncoder, indent=2)
 
-    # --------- CSV AGGREGATO ---------
+    # --------- CSV AGGREGATO COMPATIBILE ---------
     with open("locust_summary.csv", "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow([
             "name", "method", "requests", "failures",
             "avg", "min", "max", "median", "p95", "rps"
         ])
+
         for s in environment.stats.entries.values():
+            # compat per nome dei campi tra versioni diverse
+            # num_requests / num_reqs
+            num_requests = getattr(s, "num_requests", None)
+            if num_requests is None:
+                num_requests = getattr(s, "num_reqs", 0)
+
+            # num_failures / num_failures (stesso nome di solito)
+            num_failures = getattr(s, "num_failures", 0)
+
+            avg_response_time = getattr(s, "avg_response_time", 0)
+            min_response_time = getattr(s, "min_response_time", 0)
+            max_response_time = getattr(s, "max_response_time", 0)
+            median_response_time = getattr(s, "median_response_time", 0)
+
+            # total_rps / current_rps / rps
+            rps = getattr(s, "total_rps",
+                  getattr(s, "current_rps",
+                  getattr(s, "rps", 0)))
+
+            try:
+                p95 = s.get_response_time_percentile(0.95)
+            except Exception:
+                p95 = 0
+
             writer.writerow([
-                s.name,
-                s.method,
-                s.num_reqs,
-                s.num_failures,
-                s.avg_response_time,
-                s.min_response_time,
-                s.max_response_time,
-                s.median_response_time,
-                s.get_response_time_percentile(0.95),
-                s.total_rps
+                getattr(s, "name", ""),
+                getattr(s, "method", ""),
+                num_requests,
+                num_failures,
+                avg_response_time,
+                min_response_time,
+                max_response_time,
+                median_response_time,
+                p95,
+                rps,
             ])
 
     print("📁 Salvati: locust_stats.json, locust_times.json, locust_summary.csv")
+
 
 # ===================================
 # RPS REALTIME LOGGING
