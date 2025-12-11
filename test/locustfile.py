@@ -8,7 +8,13 @@ import time
 import requests
 
 from locust import HttpUser, task, between, events, LoadTestShape
-from locust.statistics import StatsJSONEncoder
+
+class MinimalJSONEncoder(json.JSONEncoder):
+    def default(self, o):
+        try:
+            return o.__dict__
+        except:
+            return str(o)
 
 # ===================================
 # CONFIG
