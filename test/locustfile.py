@@ -272,7 +272,12 @@ def export_locust_stats(environment, **_kwargs):
 
     # JSON completo
     with open("locust_stats.json", "w") as f:
-        json.dump(environment.stats.serialize_stats(), f, cls=MinimalJSONEncoder, indent=2)
+        try:
+            stats_history = environment.stats.serialize_stats_history()
+        except:
+            stats_history = {}  # versioni più vecchie non lo implementano
+        
+        json.dump(stats_history, f, cls=MinimalJSONEncoder, indent=2)
 
     # Storia tempi
     with open("locust_times.json", "w") as f:
@@ -304,23 +309,23 @@ def export_locust_stats(environment, **_kwargs):
 # ===================================
 # RPS REALTIME LOGGING
 # ===================================
-def export_realtime_metrics(env):
+def export_realtime_metrics(environment):
     with open("realtime_rps.csv", "a", newline="") as f:
         writer = csv.writer(f)
         writer.writerow([
             time.time(),
-            env.stats.total.current_rps,
-            env.stats.total.fail_ratio,
-            env.runner.user_count if env.runner else 0
+            environment.stats.total.current_rps,
+            environment.stats.total.fail_ratio,
+            environment.runner.user_count if environment.runner else 0
         ])
-    threading.Timer(1, export_realtime_metrics, args=[env]).start()
+    threading.Timer(1, export_realtime_metrics, args=[environment]).start()
 
 
 @events.test_start.add_listener
-def on_test_start(env, **_):
+def on_test_start(environment, **_):
     with open("realtime_rps.csv", "w", newline="") as f:
         csv.writer(f).writerow(["timestamp", "rps", "fail_ratio", "users"])
-    export_realtime_metrics(env)
+    export_realtime_metrics(environment)
 
 # ===================================
 # OPTIONAL: CUSTOM SHAPE
