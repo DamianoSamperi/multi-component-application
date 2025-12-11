@@ -207,9 +207,10 @@ def log_request(request_type, name, response_time, response_length, exception, *
 
 # ===================================
 # LOCUST USER
-# ===================================
+# =================================locust -f locustfile.py --curve sinus --curve-users 15 --curve-duration 600==
 class PipelineUser(HttpUser):
-    wait_time = between(1, 3)
+    #wait_time = between(1, 3)
+    wait_time = lambda self: 0
     host = "http://dummy"
 
     @task
