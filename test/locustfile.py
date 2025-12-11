@@ -272,7 +272,7 @@ def export_locust_stats(environment, **_kwargs):
 
     # JSON completo
     with open("locust_stats.json", "w") as f:
-        json.dump(environment.stats.serialize_stats(), f, cls=StatsJSONEncoder, indent=2)
+        json.dump(environment.stats.serialize_stats(), f, cls=MinimalJSONEncoder, indent=2)
 
     # Storia tempi
     with open("locust_times.json", "w") as f:
