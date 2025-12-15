@@ -20,6 +20,7 @@ CACHE_TTL = 5
 TEST_ID = f"locust-{uuid.uuid4().hex[:8]}"
 TEST_START_TS = None
 TEST_STOP_TS = None
+REALTIME_RUNNING = True
 
 # ==========================
 # FILES
@@ -218,6 +219,8 @@ class PipelineUser(HttpUser):
 # REALTIME LOCUST (rps/users)
 # ==========================
 def export_realtime_metrics(environment):
+    if not REALTIME_RUNNING:
+        return
     with open("realtime_rps.csv", "a", newline="") as f:
         writer = csv.writer(f)
         writer.writerow([
@@ -297,6 +300,8 @@ def prom_export_summary(test_id: str, duration_s: int):
 def on_test_stop(environment, **_):
     global TEST_STOP_TS
     TEST_STOP_TS = time.time()
+    global REALTIME_RUNNING
+    REALTIME_RUNNING = False
     duration_s = int(TEST_STOP_TS - (TEST_START_TS or TEST_STOP_TS))
     print(f"📊 Export Prometheus per TEST_ID={TEST_ID}, duration={duration_s}s")
 
