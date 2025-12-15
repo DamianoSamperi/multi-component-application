@@ -59,11 +59,6 @@ step_latency = Histogram(
     ["pipeline_id", "step_id", "pod_name", "test_id"],
     buckets=(0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60, 120, 300, 600, 1200)
 )
-step_rejected_requests = Counter(
-    "step_rejected_requests_total",
-    "Numero richieste rifiutate per overload",
-    ["pipeline_id", "step_id", "pod_name", "test_id"],
-)
 
 @app.before_request
 def before_request():
@@ -152,8 +147,6 @@ if current_step_conf:
     if step_type in available_steps:
         pipeline.append(available_steps[step_type](**current_step_conf.get("params", {})))
         
-STEP_MAX_CONCURRENCY = int(os.getenv("STEP_MAX_CONCURRENCY", "1"))
-step_semaphore = threading.Semaphore(STEP_MAX_CONCURRENCY)
 
 def send_to_next_step_async(url, files, headers):
     try:
@@ -163,11 +156,6 @@ def send_to_next_step_async(url, files, headers):
         
 @app.route("/process", methods=["POST"])
 def process():
-    if not step_semaphore.acquire(blocking=False):
-        step_rejected_requests.labels(
-            PIPELINE_ID, STEP_ID, POD_NAME, g.test_id
-        ).inc()
-        return jsonify({"error": "step overloaded"}), 503
     try:
         image_file = request.files["image"]
         image = Image.open(image_file).convert("RGB")
@@ -303,8 +291,7 @@ def process():
         print(f"[ERROR] /process: {e}")
         traceback.print_exc()
         return jsonify({"error": f"Errore invio a step {chosen_next}: {e}"}), 500    
-    finally:
-        step_semaphore.release()
+
 
 
 #if __name__ == "__main__":
