@@ -57,7 +57,12 @@ step_latency = Histogram(
     "step_processing_time_seconds",
     "Tempo di elaborazione per step",
     ["pipeline_id", "step_id", "pod_name"],
-    buckets=(0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60, 120, 300)
+    buckets=(0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60, 120, 300, 600, 1200)
+)
+step_rejected_requests = Counter(
+    "step_rejected_requests_total",
+    "Numero richieste rifiutate per overload",
+    ["pipeline_id", "step_id", "pod_name"]
 )
 
 @app.before_request
@@ -158,6 +163,9 @@ def send_to_next_step_async(url, files):
 @app.route("/process", methods=["POST"])
 def process():
     if not step_semaphore.acquire(blocking=False):
+        step_rejected_requests.labels(
+            PIPELINE_ID, STEP_ID, POD_NAME
+        ).inc()
         return jsonify({"error": "step overloaded"}), 503
     try:
         image_file = request.files["image"]
@@ -279,7 +287,7 @@ def process():
         #     "X-Forwarded-To": str(chosen_next),
         # }
         headers = {
-            **step_header,
+            #**step_header,
             "X-Step-ID": str(STEP_ID),
             "X-Pod-Name": POD_NAME,
             "X-In-Flight": str(http_request_in_progress.labels(
