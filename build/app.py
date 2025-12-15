@@ -56,18 +56,19 @@ POD_NAME = os.getenv("POD_NAME", socket.gethostname())
 step_latency = Histogram(
     "step_processing_time_seconds",
     "Tempo di elaborazione per step",
-    ["pipeline_id", "step_id", "pod_name"],
+    ["pipeline_id", "step_id", "pod_name", "test_id"],
     buckets=(0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60, 120, 300, 600, 1200)
 )
 step_rejected_requests = Counter(
     "step_rejected_requests_total",
     "Numero richieste rifiutate per overload",
-    ["pipeline_id", "step_id", "pod_name"]
+    ["pipeline_id", "step_id", "pod_name", "test_id"],
 )
 
 @app.before_request
 def before_request():
     g.start_time = time.time()
+    g.test_id = request.headers.get("X-Test-ID", "unknown")
     http_request_in_progress.labels(PIPELINE_ID, STEP_ID, POD_NAME).inc()
     http_requests_total.labels(request.method, request.path, PIPELINE_ID, STEP_ID, POD_NAME).inc()
 
@@ -156,7 +157,7 @@ step_semaphore = threading.Semaphore(STEP_MAX_CONCURRENCY)
 
 def send_to_next_step_async(url, files):
     try:
-        requests.post(url, files=files, timeout=300)
+        requests.post(url, files=files, headers=headers, timeout=300)
     except Exception as e:
         print(f"[WARN] Async send failed: {e}")
         
@@ -164,7 +165,7 @@ def send_to_next_step_async(url, files):
 def process():
     if not step_semaphore.acquire(blocking=False):
         step_rejected_requests.labels(
-            PIPELINE_ID, STEP_ID, POD_NAME
+            PIPELINE_ID, STEP_ID, POD_NAME, g.test_id
         ).inc()
         return jsonify({"error": "step overloaded"}), 503
     try:
@@ -176,7 +177,7 @@ def process():
         # for step in pipeline:
         #     image = step.run(image)
         # elapsed = time.time() - start_time
-        with step_latency.labels(PIPELINE_ID, STEP_ID, POD_NAME).time():
+        with step_latency.labels(PIPELINE_ID, STEP_ID, POD_NAME,g.test_id).time():
             for step in pipeline:
                 image = step.run(image)
 
@@ -275,9 +276,11 @@ def process():
         
         # #return r.content, r.status_code, r.headers.items()
         # return r.content, r.status_code, combined_headers.items()
+
+        fwd_headers = {"X-Test-ID": g.test_id}
         threading.Thread(
             target=send_to_next_step_async,
-            args=(next_url, files),
+            args=(next_url, files, fwd_headers),
             daemon=True
         ).start()
         
