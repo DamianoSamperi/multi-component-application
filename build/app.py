@@ -2,34 +2,24 @@ import os
 import yaml
 import io
 import requests
+import threading
 import time
 import socket
 from flask import Flask, request, jsonify, g
 from PIL import Image
 from kubernetes import client, config as k8s_config
-from prometheus_client import Counter, Gauge, generate_latest, CONTENT_TYPE_LATEST
+from prometheus_client import Counter, Gauge, generate_latest, CONTENT_TYPE_LATEST, Histogram
 import traceback
 
 
 USE_LIGHT = os.getenv("USE_LIGHT", "false").lower() == "true"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-# Importa i tuoi step
-#from steps.upscaler import Upscaler
-#if USE_LIGHT:
-#    from steps.classifier_light import Classifier
-#else:
-#    from steps.classifier import Classifier
-#from steps.grayscale import Grayscale
-#from steps.deblur import Deblur
 
 
 
 app = Flask(__name__)
 accepting_requests = True
 
-# @app.route("/readyz")
-# def readyz():
-#     return ("ok", 200) if accepting_requests else ("draining", 503)
 @app.route("/readyz")
 def readyz():
     # se lo step corrente ha l'attributo `ready`, controllalo
@@ -63,6 +53,12 @@ http_request_in_progress = Gauge(
 )
 POD_NAME = os.getenv("POD_NAME", socket.gethostname())
 
+step_latency = Histogram(
+    "step_processing_time_seconds",
+    "Tempo di elaborazione per step",
+    ["pipeline_id", "step_id", "pod_name"],
+    buckets=(0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60, 120, 300)
+)
 
 @app.before_request
 def before_request():
@@ -80,6 +76,8 @@ def after_request(response):
 @app.route("/metrics")
 def metrics():
     return generate_latest(), 200, {'Content-Type': CONTENT_TYPE_LATEST}
+
+
 
 # --- Lettura config pipeline da env ---
 pipeline_yaml = os.getenv("PIPELINE_CONFIG", '{"steps":[]}')
@@ -147,22 +145,36 @@ if current_step_conf:
     step_type = current_step_conf["type"]
     if step_type in available_steps:
         pipeline.append(available_steps[step_type](**current_step_conf.get("params", {})))
+        
+STEP_MAX_CONCURRENCY = int(os.getenv("STEP_MAX_CONCURRENCY", "1"))
+step_semaphore = threading.Semaphore(STEP_MAX_CONCURRENCY)
 
-
+def send_to_next_step_async(url, files):
+    try:
+        requests.post(url, files=files, timeout=300)
+    except Exception as e:
+        print(f"[WARN] Async send failed: {e}")
+        
 @app.route("/process", methods=["POST"])
 def process():
+    if not step_semaphore.acquire(blocking=False):
+        return jsonify({"error": "step overloaded"}), 503
     try:
         image_file = request.files["image"]
         image = Image.open(image_file).convert("RGB")
         
-        # ⏱️ misura tempo step
-        start_time = time.time()
-        for step in pipeline:
-            image = step.run(image)
-        elapsed = time.time() - start_time
+        #  misura tempo step
+        # start_time = time.time()
+        # for step in pipeline:
+        #     image = step.run(image)
+        # elapsed = time.time() - start_time
+        with step_latency.labels(PIPELINE_ID, STEP_ID, POD_NAME).time():
+            for step in pipeline:
+                image = step.run(image)
+
         
         # Header custom con il tempo di questo step
-        step_header = {f"X-Step-{STEP_ID}-Time": str(elapsed)}
+        #step_header = {f"X-Step-{STEP_ID}-Time": str(elapsed)}
     
         # 2️⃣ Determina il prossimo step dalla config
         next_steps = current_step_conf.get("next_step", None)
@@ -248,18 +260,40 @@ def process():
     files = {"image": ("frame.jpg", buf, "image/jpeg")}
 
     try:
-        r = requests.post(next_url, files=files)
-        # Unisci gli header di risposta con il tempo dello step corrente
-        combined_headers = dict(r.headers)
-        combined_headers.update(step_header)
+        # r = requests.post(next_url, files=files)
+        # # Unisci gli header di risposta con il tempo dello step corrente
+        # combined_headers = dict(r.headers)
+        # combined_headers.update(step_header)
         
-        #return r.content, r.status_code, r.headers.items()
-        return r.content, r.status_code, combined_headers.items()
+        # #return r.content, r.status_code, r.headers.items()
+        # return r.content, r.status_code, combined_headers.items()
+        threading.Thread(
+            target=send_to_next_step_async,
+            args=(next_url, files),
+            daemon=True
+        ).start()
+        
+        # risposta immediata
+        # headers = {
+        #     **step_header,
+        #     "X-Forwarded-To": str(chosen_next),
+        # }
+        headers = {
+            **step_header,
+            "X-Step-ID": str(STEP_ID),
+            "X-Pod-Name": POD_NAME,
+            "X-In-Flight": str(http_request_in_progress.labels(
+                PIPELINE_ID, STEP_ID, POD_NAME)._value.get()
+            )
+        }
+
+        return jsonify({"status": "forwarded"}), 202, headers
     except Exception as e:
         print(f"[ERROR] /process: {e}")
         traceback.print_exc()
         return jsonify({"error": f"Errore invio a step {chosen_next}: {e}"}), 500    
-
+    finally:
+        step_semaphore.release()
 
 
 #if __name__ == "__main__":
