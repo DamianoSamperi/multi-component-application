@@ -5,53 +5,54 @@ import subprocess
 import sys
 import threading
 import time
+import uuid
 import requests
 
-from locust import HttpUser, task, between, events, LoadTestShape
+from locust import HttpUser, task, events, LoadTestShape
 
-class MinimalJSONEncoder(json.JSONEncoder):
-    def default(self, o):
-        try:
-            return o.__dict__
-        except:
-            return str(o)
-
-# ===================================
+# ==========================
 # CONFIG
-# ===================================
+# ==========================
 PROM_URL = "http://192.168.1.251:30090"
-CACHE_TTL = 5  # secondi
+CACHE_TTL = 5
 
-# ===================================
-# LOG FILE (raw timings)
-# ===================================
+# Test id unico per ogni run Locust
+TEST_ID = f"locust-{uuid.uuid4().hex[:8]}"
+TEST_START_TS = None
+TEST_STOP_TS = None
+
+# ==========================
+# FILES
+# ==========================
 raw_file = open("raw_timings.csv", "w", newline="")
 raw_writer = csv.writer(raw_file)
 raw_writer.writerow([
     "timestamp",
+    "test_id",
     "request_type",
     "name",
     "response_time_ms",
     "success",
+    "status_code",
     "gpu_usage_percentage",
     "http_requests_in_progress",
     "node_ip"
 ])
 raw_file.flush()
 
-# ===================================
-# PROMETHEUS HELPERS
-# ===================================
+# ==========================
+# PROM CACHE
+# ==========================
 _last_metrics = {"time": 0, "gpu": {}, "http": {}}
 
+def prom_query_instant(query: str, timeout=5):
+    r = requests.get(f"{PROM_URL}/api/v1/query", params={"query": query}, timeout=timeout)
+    r.raise_for_status()
+    return r.json().get("data", {}).get("result", [])
 
 def query_gpu_usage_per_node():
     try:
-        r = requests.get(f"{PROM_URL}/api/v1/query",
-                         params={"query": "gpu_usage_percentage"},
-                         timeout=2)
-        r.raise_for_status()
-        results = r.json().get("data", {}).get("result", [])
+        results = prom_query_instant("gpu_usage_percentage")
         gpu = {}
         for res in results:
             instance = res["metric"].get("instance", "")
@@ -62,24 +63,18 @@ def query_gpu_usage_per_node():
         print("⚠️ GPU query error:", e)
         return {}
 
-
 def query_http_in_progress_per_step():
     try:
-        r = requests.get(f"{PROM_URL}/api/v1/query",
-                         params={"query": "http_requests_in_progress"},
-                         timeout=2)
-        r.raise_for_status()
-        results = r.json().get("data", {}).get("result", [])
+        results = prom_query_instant("http_requests_in_progress")
         http = {}
         for res in results:
             step_id = res["metric"].get("step_id")
-            if step_id:
+            if step_id is not None and step_id != "":
                 http[f"step-{step_id}"] = float(res["value"][1])
         return http
     except Exception as e:
         print("⚠️ HTTP query error:", e)
         return {}
-
 
 def get_metrics_cached():
     now = time.time()
@@ -89,37 +84,27 @@ def get_metrics_cached():
         _last_metrics["time"] = now
     return _last_metrics["gpu"], _last_metrics["http"]
 
-
-# ===================================
-# DISCOVER ENTRYPOINTS (step-0 services)
-# ===================================
+# ==========================
+# DISCOVER ENTRYPOINTS
+# ==========================
 def get_pipeline_entrypoints():
     pod_list = subprocess.run(
         ["kubectl", "get", "pods", "--no-headers", "-o", "custom-columns=:metadata.name"],
-        stdout=subprocess.PIPE,
-        text=True,
-        check=True,
+        stdout=subprocess.PIPE, text=True, check=True
     )
     pod = next((p for p in pod_list.stdout.splitlines() if "step-0" in p), None)
+    if not pod:
+        return []
 
     node_ip = subprocess.run(
         ["kubectl", "get", "pod", pod, "-o", "jsonpath={.status.hostIP}"],
-        stdout=subprocess.PIPE,
-        text=True,
-        check=True,
+        stdout=subprocess.PIPE, text=True, check=True
     ).stdout.strip()
 
     svc_list = subprocess.run(
-        [
-            "kubectl",
-            "get",
-            "svc",
-            "-o",
-            "jsonpath={range .items[*]}{.metadata.name} {.spec.type} {.spec.ports[0].nodePort}{\"\\n\"}{end}",
-        ],
-        stdout=subprocess.PIPE,
-        text=True,
-        check=True,
+        ["kubectl", "get", "svc",
+         "-o", "jsonpath={range .items[*]}{.metadata.name} {.spec.type} {.spec.ports[0].nodePort}{\"\\n\"}{end}"],
+        stdout=subprocess.PIPE, text=True, check=True
     )
 
     entry = []
@@ -131,22 +116,19 @@ def get_pipeline_entrypoints():
                 entry.append((name, f"http://{node_ip}:{node_port}"))
     return entry
 
-
 ENTRYPOINTS = get_pipeline_entrypoints()
 print("Entrypoints:", ENTRYPOINTS)
+print("🧪 TEST_ID:", TEST_ID)
 
-# ===================================
-# MAPPA STEP -> NODE
-# ===================================
+# ==========================
+# STEP -> NODE MAP
+# ==========================
 def get_step_node_map(prefix="pipeline-"):
     out = subprocess.run(
         ["kubectl", "get", "pods", "-n", "default", "--no-headers",
          "-o", "custom-columns=:metadata.name,:status.hostIP"],
-        stdout=subprocess.PIPE,
-        text=True,
-        check=True,
+        stdout=subprocess.PIPE, text=True, check=True
     )
-
     mapping = {}
     for line in out.stdout.splitlines():
         parts = line.split()
@@ -154,62 +136,56 @@ def get_step_node_map(prefix="pipeline-"):
             continue
         pod, host_ip = parts
         if prefix in pod and "step-" in pod:
-            step_name = "-".join(pod.split("-")[3:5])
+            step_name = "-".join(pod.split("-")[3:5])  # es. "0-xxxxxx"
             mapping[step_name] = host_ip
     return mapping
-
 
 STEP_NODE_MAP = get_step_node_map()
 print("Step → Node:", STEP_NODE_MAP)
 
-# ===================================
-# LOG REQUEST LISTENER
-# ===================================
+def node_ip_for_step(step_idx: int):
+    # la tua mappa ha chiavi tipo "0-<podhash>"
+    for k, v in STEP_NODE_MAP.items():
+        if k.startswith(f"{step_idx}-"):
+            return v
+    return None
+
+# ==========================
+# REQUEST LISTENER -> raw_timings.csv
+# ==========================
 @events.request.add_listener
 def log_request(request_type, name, response_time, response_length, exception, **kwargs):
     gpu_dict, http_dict = get_metrics_cached()
-    step_idx = None
 
-    if name.startswith("X-Step-") and "-Time" in name:
-        try:
-            step_idx = int(name.split("-")[2])
-        except:
-            pass
+    # Per questa run, logghiamo solo:
+    # - la POST verso step-0 (end-to-end)
+    # - eventuali errori
+    step0_ip = node_ip_for_step(0)
+    node_ip = step0_ip
 
-    node_ip = None
-    if step_idx is not None:
-        for k in STEP_NODE_MAP:
-            if k.startswith(f"{step_idx}-"):
-                node_ip = STEP_NODE_MAP[k]
-                name = f"step-{step_idx}"
-                break
+    gpu_val = gpu_dict.get(node_ip, 0) if node_ip else 0
+    http_val = http_dict.get("step-0", 0)
 
-    if node_ip is None and "step-0" in name:
-        for k in STEP_NODE_MAP:
-            if k.startswith("0-"):
-                node_ip = STEP_NODE_MAP[k]
-                break
-
-    gpu_val = gpu_dict.get(node_ip, 0)
-    http_val = http_dict.get(name, 0)
+    status_code = kwargs.get("response").status_code if kwargs.get("response") is not None else ""
 
     raw_writer.writerow([
         time.strftime("%Y-%m-%d %H:%M:%S"),
+        TEST_ID,
         request_type,
         name,
         f"{response_time:.2f}",
         "OK" if exception is None else "FAIL",
+        status_code,
         f"{gpu_val:.2f}",
         f"{http_val:.2f}",
-        node_ip or "unknown"
+        node_ip or "unknown",
     ])
     raw_file.flush()
 
-# ===================================
-# LOCUST USER
-# =================================locust -f locustfile.py --curve sinus --curve-users 15 --curve-duration 600==
+# ==========================
+# USER
+# ==========================
 class PipelineUser(HttpUser):
-    #wait_time = between(1, 3)
     wait_time = lambda self: 0
     host = "http://dummy"
 
@@ -219,154 +195,28 @@ class PipelineUser(HttpUser):
             return
 
         img = "your_image.jpg"
+        headers = {"X-Test-ID": TEST_ID}
 
         for name, base_url in ENTRYPOINTS:
             self.client.base_url = base_url
             with open(img, "rb") as f:
                 files = {"image": (img, f, "image/jpeg")}
-                with self.client.post("/process", files=files, name=name, catch_response=True) as resp:
-                    if resp.status_code == 200:
-                        step_times = {k: float(v) for k, v in resp.headers.items() if k.startswith("X-Step-")}
+                # ora lo step risponde 202 quasi subito
+                with self.client.post(
+                    "/process",
+                    files=files,
+                    headers=headers,
+                    name=name,
+                    catch_response=True
+                ) as resp:
+                    if resp.status_code in (200, 202):
                         resp.success()
-
-                        for step, elapsed in step_times.items():
-                            try:
-                                step_idx = int(step.split("-")[2])
-                            except:
-                                continue
-
-                            node_ip = None
-                            for k in STEP_NODE_MAP:
-                                if k.startswith(f"{step_idx}-"):
-                                    node_ip = STEP_NODE_MAP[k]
-                                    break
-
-                            gpu_avg = 0
-                            if node_ip:
-                                interval = max(1, int(elapsed))
-                                q = f'avg_over_time(gpu_usage_percentage{{instance="{node_ip}:9401"}}[{interval}s])'
-                                try:
-                                    r = requests.get(f"{PROM_URL}/api/v1/query", params={"query": q}, timeout=2)
-                                    result = r.json().get("data", {}).get("result", [])
-                                    if result:
-                                        gpu_avg = float(result[0]["value"][1])
-                                except:
-                                    gpu_avg = 0
-
-                            events.request.fire(
-                                request_type="STEP",
-                                name=step,
-                                response_time=elapsed * 1000,
-                                response_length=0,
-                                exception=None,
-                                context={"gpu_avg": gpu_avg, "node": node_ip}
-                            )
                     else:
                         resp.failure(f"HTTP {resp.status_code}")
 
-# ===================================
-# EXPORT METRICHE LOCUST FINALI
-# ===================================
-@events.test_stop.add_listener
-def export_locust_stats(environment, **_kwargs):
-    print("📊 Esporto metriche Locust...")
-
-    # --------- LEGGI STATISTICHE IN MANIERA UNIVERSALE ---------
-    stats_entries = []
-    for s in environment.stats.entries.values():
-        
-        # ---- num_requests compatibile ----
-        num_requests = getattr(s, "num_requests", getattr(s, "num_reqs", 0))
-
-        # ---- tempi pre-calcolati (se esistono) ----
-        avg = getattr(s, "avg_response_time", None)
-        min_rt = getattr(s, "min_response_time", None)
-        max_rt = getattr(s, "max_response_time", None)
-        median = getattr(s, "median_response_time", None)
-
-        # ---- calcola p95 manuale ----
-        p95 = 0
-        try:
-            p95 = s.get_response_time_percentile(0.95)
-        except:
-            # fallback: calcola p95 a mano dai bucket
-            if hasattr(s, "response_times"):
-                # costruiamo lista di valori grezzi
-                expanded = []
-                for t, count in s.response_times.items():
-                    expanded += [float(t)] * int(count)
-                if expanded:
-                    expanded.sort()
-                    p95 = expanded[int(len(expanded)*0.95)]
-
-        # ---- calcola Avg manuale se necessario ----
-        if avg is None:
-            total_rt = getattr(s, "total_response_time", 0)
-            avg = total_rt / num_requests if num_requests > 0 else 0
-
-        # ---- calcola Median manuale se necessario ----
-        if median is None and hasattr(s, "response_times"):
-            expanded = []
-            for t, count in s.response_times.items():
-                expanded += [float(t)] * int(count)
-            if expanded:
-                expanded.sort()
-                median = expanded[len(expanded) // 2]
-            else:
-                median = 0
-
-        # ---- calcola Min/Max manuale ----
-        if min_rt is None and hasattr(s, "response_times"):
-            times = [float(t) for t in s.response_times.keys()]
-            min_rt = min(times) if times else 0
-        
-        if max_rt is None and hasattr(s, "response_times"):
-            times = [float(t) for t in s.response_times.keys()]
-            max_rt = max(times) if times else 0
-
-        # ---- calcolo RPS manuale ----
-        rps = 0
-        if hasattr(s, "num_reqs_per_sec"):
-            # media su tutta la durata del test
-            rps = sum(s.num_reqs_per_sec.values()) / len(s.num_reqs_per_sec.values())
-
-        stats_entries.append({
-            "name": getattr(s, "name", ""),
-            "method": getattr(s, "method", "-"),
-            "requests": num_requests,
-            "failures": getattr(s, "num_failures", 0),
-            "avg": avg,
-            "min": min_rt,
-            "max": max_rt,
-            "median": median,
-            "p95": p95,
-            "rps": rps
-        })
-
-    # --------- SALVA CSV COMPATIBILE ---------
-    with open("locust_summary.csv", "w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow([
-            "name", "method", "requests", "failures",
-            "avg_ms", "min_ms", "max_ms", "median_ms", "p95_ms", "rps"
-        ])
-
-        for e in stats_entries:
-            writer.writerow([
-                e["name"], e["method"], e["requests"], e["failures"],
-                round(e["avg"], 3),
-                round(e["min"], 3),
-                round(e["max"], 3),
-                round(e["median"], 3),
-                round(e["p95"], 3),
-                round(e["rps"], 3),
-            ])
-
-    print("📁 Salvato: locust_summary.csv (versione compatibile)")
-
-# ===================================
-# RPS REALTIME LOGGING
-# ===================================
+# ==========================
+# REALTIME LOCUST (rps/users)
+# ==========================
 def export_realtime_metrics(environment):
     with open("realtime_rps.csv", "a", newline="") as f:
         writer = csv.writer(f)
@@ -378,16 +228,86 @@ def export_realtime_metrics(environment):
         ])
     threading.Timer(1, export_realtime_metrics, args=[environment]).start()
 
-
 @events.test_start.add_listener
 def on_test_start(environment, **_):
+    global TEST_START_TS
+    TEST_START_TS = time.time()
+
     with open("realtime_rps.csv", "w", newline="") as f:
         csv.writer(f).writerow(["timestamp", "rps", "fail_ratio", "users"])
     export_realtime_metrics(environment)
 
-# ===================================
-# OPTIONAL: CUSTOM SHAPE
-# ===================================
+# ==========================
+# PROMETHEUS EXPORT PER TEST_ID (FINE TEST)
+# ==========================
+def prom_export_summary(test_id: str, duration_s: int):
+    """
+    Esporta in prom_summary.csv:
+    - avg step time (seconds)
+    - p95 step time (seconds)
+    - rps (requests/sec) per step, dal count dell'Histogram
+    Tutto filtrato per test_id.
+    """
+    dur = max(10, int(duration_s))  # evita range troppo corto
+    rng = f"{dur}s"
+
+    q_avg = f'''
+    sum(rate(step_processing_time_seconds_sum{{test_id="{test_id}"}}[{rng}])) by (step_id)
+    /
+    sum(rate(step_processing_time_seconds_count{{test_id="{test_id}"}}[{rng}])) by (step_id)
+    '''
+
+    q_p95 = f'''
+    histogram_quantile(
+      0.95,
+      sum(rate(step_processing_time_seconds_bucket{{test_id="{test_id}"}}[{rng}])) by (le, step_id)
+    )
+    '''
+
+    q_rps = f'''
+    sum(rate(step_processing_time_seconds_count{{test_id="{test_id}"}}[{rng}])) by (step_id)
+    '''
+
+    avg_res = prom_query_instant(q_avg)
+    p95_res = prom_query_instant(q_p95)
+    rps_res = prom_query_instant(q_rps)
+
+    avg_map = {row["metric"].get("step_id", "unknown"): float(row["value"][1]) for row in avg_res}
+    p95_map = {row["metric"].get("step_id", "unknown"): float(row["value"][1]) for row in p95_res}
+    rps_map = {row["metric"].get("step_id", "unknown"): float(row["value"][1]) for row in rps_res}
+
+    step_ids = sorted(set(avg_map.keys()) | set(p95_map.keys()) | set(rps_map.keys()))
+
+    with open("prom_summary.csv", "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["test_id", "duration_s", "step_id", "avg_s", "p95_s", "rps"])
+        for sid in step_ids:
+            w.writerow([
+                test_id,
+                dur,
+                sid,
+                f"{avg_map.get(sid, 0):.6f}",
+                f"{p95_map.get(sid, 0):.6f}",
+                f"{rps_map.get(sid, 0):.6f}",
+            ])
+
+    print("📁 Salvato: prom_summary.csv (scoped by test_id)")
+
+@events.test_stop.add_listener
+def on_test_stop(environment, **_):
+    global TEST_STOP_TS
+    TEST_STOP_TS = time.time()
+    duration_s = int(TEST_STOP_TS - (TEST_START_TS or TEST_STOP_TS))
+    print(f"📊 Export Prometheus per TEST_ID={TEST_ID}, duration={duration_s}s")
+
+    try:
+        prom_export_summary(TEST_ID, duration_s)
+    except Exception as e:
+        print("⚠️ prom_export_summary failed:", e)
+
+# ==========================
+# LOAD SHAPE
+# ==========================
 USE_SHAPE = any(arg.startswith("--curve") for arg in sys.argv)
 
 if USE_SHAPE:
@@ -416,6 +336,7 @@ if USE_SHAPE:
             t = self.get_run_time()
             if t > CURVE_DURATION:
                 return None
+
             if CURVE_TYPE == "ramp":
                 users = int(CURVE_USERS * t / CURVE_DURATION)
             elif CURVE_TYPE == "step":
@@ -423,9 +344,10 @@ if USE_SHAPE:
                 lvl = int(t // step)
                 users = int((lvl + 1) * CURVE_USERS / 5)
             elif CURVE_TYPE == "spike":
-                users = CURVE_USERS if CURVE_DURATION/4 <= t <= 3*CURVE_DURATION/4 else int(CURVE_USERS/10)
+                users = CURVE_USERS if (CURVE_DURATION/4 <= t <= 3*CURVE_DURATION/4) else int(CURVE_USERS/10)
             elif CURVE_TYPE == "sinus":
                 users = int((CURVE_USERS/2) * (1 + math.sin(t / CURVE_DURATION * 2 * math.pi)))
             else:
                 users = CURVE_USERS
+
             return users, CURVE_SPAWN_RATE
