@@ -155,7 +155,7 @@ if current_step_conf:
 STEP_MAX_CONCURRENCY = int(os.getenv("STEP_MAX_CONCURRENCY", "1"))
 step_semaphore = threading.Semaphore(STEP_MAX_CONCURRENCY)
 
-def send_to_next_step_async(url, files):
+def send_to_next_step_async(url, files, headers):
     try:
         requests.post(url, files=files, headers=headers, timeout=300)
     except Exception as e:
