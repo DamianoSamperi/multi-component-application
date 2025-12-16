@@ -50,6 +50,51 @@ def prom_query_instant(query: str, timeout=5):
     r = requests.get(f"{PROM_URL}/api/v1/query", params={"query": query}, timeout=timeout)
     r.raise_for_status()
     return r.json().get("data", {}).get("result", [])
+    
+def prom_query_range(query, start, end, step):
+    r = requests.get(
+        f"{PROM_URL}/api/v1/query_range",
+        params={
+            "query": query,
+            "start": start,
+            "end": end,
+            "step": step,
+        },
+        timeout=10
+    )
+    r.raise_for_status()
+    return r.json()["data"]["result"]
+def export_prom_timeseries(test_id, start_ts, end_ts):
+    step = 60  # 1 punto al minuto
+
+    rps_ts = prom_query_range(q_rps_ts, start_ts, end_ts, step)
+    p95_ts = prom_query_range(q_p95_ts, start_ts, end_ts, step)
+
+    with open("prom_timeseries.csv", "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["test_id", "timestamp", "step_id", "rps", "p95_s"])
+
+        # indicizza per step_id + timestamp
+        tmp = {}
+
+        for series in rps_ts:
+            sid = series["metric"]["step_id"]
+            for ts, val in series["values"]:
+                tmp.setdefault((sid, ts), {})["rps"] = float(val)
+
+        for series in p95_ts:
+            sid = series["metric"]["step_id"]
+            for ts, val in series["values"]:
+                tmp.setdefault((sid, ts), {})["p95"] = float(val)
+
+        for (sid, ts), vals in sorted(tmp.items()):
+            w.writerow([
+                test_id,
+                int(float(ts)),
+                sid,
+                vals.get("rps", 0),
+                vals.get("p95", 0),
+            ])
 
 def query_gpu_usage_per_node():
     try:
@@ -270,6 +315,16 @@ def prom_export_summary(test_id: str, duration_s: int):
     q_rps = f'''
     sum(rate(step_processing_time_seconds_count{{test_id="{test_id}"}}[{rng}])) by (step_id)
     '''
+    q_rps_ts = """
+    sum(rate(step_processing_time_seconds_count[1m])) by (step_id)
+    """
+    
+    q_p95_ts = """
+    histogram_quantile(
+      0.95,
+      sum(rate(step_processing_time_seconds_bucket[1m])) by (le, step_id)
+    )
+    """
 
     avg_res = prom_query_instant(q_avg)
     p95_res = prom_query_instant(q_p95)
@@ -307,6 +362,7 @@ def on_test_stop(environment, **_):
 
     try:
         prom_export_summary(TEST_ID, duration_s)
+        export_prom_timeseries(TEST_ID, TEST_START_TS, TEST_STOP_TS )
     except Exception as e:
         print("⚠️ prom_export_summary failed:", e)
 
