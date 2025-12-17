@@ -198,110 +198,86 @@ def send_to_next_step_async(url, files, headers):
     except Exception as e:
         print(f"[WARN] Async send failed: {e}")
         
+ram_semaphore = threading.Semaphore(1) 
+
 @app.route("/process", methods=["POST"])
 def process():
-    try:
-        image_file = request.files["image"]
-        image = Image.open(image_file).convert("RGB")
-        
-        #  misura tempo step
-        # start_time = time.time()
-        # for step in pipeline:
-        #     image = step.run(image)
-        # elapsed = time.time() - start_time
-        with step_latency.labels(PIPELINE_ID, STEP_ID, POD_NAME,g.test_id).time():
-            for step in pipeline:
-                image = step.run(image)
+    # Usiamo il semaforo per assicurarci che solo N richieste alla volta carichino immagini
+    with ram_semaphore:
+        try:
+            image_file = request.files["image"]
+            image = Image.open(image_file).convert("RGB")
+            
+            # Esecuzione della pipeline (con il tempo misurato per Prometheus)
+            with step_latency.labels(PIPELINE_ID, STEP_ID, POD_NAME, g.test_id).time():
+                for step in pipeline:
+                    image = step.run(image)
 
-        
-        # Header custom con il tempo di questo step
-        #step_header = {f"X-Step-{STEP_ID}-Time": str(elapsed)}
-    
-    # 2️⃣ Determina il prossimo step dalla config locale
-        next_steps = current_step_conf.get("next_step", None)
-        if not next_steps:
-            # Logica ultimo step (restituisci immagine)
-            # ...
-            return output.read(), 200, headers
+            # 2️⃣ Determina il prossimo step dalla config locale
+            next_steps = current_step_conf.get("next_step", None)
+            
+            # Se è l'ultimo step della catena
+            if not next_steps:
+                output = io.BytesIO()
+                image.save(output, format="JPEG")
+                output.seek(0)
+                return output.read(), 200, {"Content-Type": "image/jpeg"}
 
-        if isinstance(next_steps, (str, int)):
-            next_steps = [next_steps]
+            if isinstance(next_steps, (str, int)):
+                next_steps = [next_steps]
 
-        # 3️⃣ Leggi dalla CACHE invece che da Kubernetes
-        with cache_lock:
-            # Copia locale della cache per evitare di tenere il lock troppo a lungo
-            current_active = list(active_steps_cache)
+            # 3️⃣ Leggi dalla CACHE aggiornata dal thread di background
+            with cache_lock:
+                current_active = list(active_steps_cache)
 
-        # 4️⃣ Filtra i prossimi step
-        available_next = [s for s in next_steps if str(s) in current_active]
-        
-        if not available_next:
-            return jsonify({"error": "Nessun prossimo step attivo"}), 500
-    
-        if isinstance(next_steps, (str, int)):
-            next_steps = [next_steps]
-    except Exception as e:
-        print(f"[ERROR] /process: {e}")
-        traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+            # 4️⃣ Filtra e seleziona il prossimo step
+            available_next = [s for s in next_steps if str(s) in current_active]
+            
+            if not available_next:
+                return jsonify({"error": "Nessun prossimo step attivo"}), 500
 
-    # 5️⃣ Costruisci URL per il prossimo step (scoped alla pipeline)
-    next_url = (
-       f"http://{PIPELINE_ID}-step-{chosen_next}.{NAMESPACE}.svc.cluster.local:{SERVICE_PORT}/process"
-    )
+            # Logica di selezione (Preferito o il primo disponibile)
+            preferred = current_step_conf.get("preferred_next")
+            if preferred and str(preferred) in available_next:
+                chosen_next = preferred
+            else:
+                chosen_next = sorted(available_next)[0]
 
+            # 5️⃣ Costruisci URL
+            next_url = f"http://{PIPELINE_ID}-step-{chosen_next}.{NAMESPACE}.svc.cluster.local:{SERVICE_PORT}/process"
 
+            # 6️⃣ Invia immagine in modo asincrono per non tenere bloccato Locust
+            buf = io.BytesIO()
+            image.save(buf, format="JPEG")
+            buf.seek(0)
+            files = {"image": ("frame.jpg", buf, "image/jpeg")}
+            
+            fwd_headers = {"X-Test-ID": g.test_id}
+            threading.Thread(
+                target=send_to_next_step_async,
+                args=(next_url, files, fwd_headers),
+                daemon=True
+            ).start()
 
-    # 6️⃣ Invia immagine al prossimo step
-    buf = io.BytesIO()
-    image.save(buf, format="JPEG")
-    buf.seek(0)
-    files = {"image": ("frame.jpg", buf, "image/jpeg")}
+            headers = {
+                "X-Step-ID": str(STEP_ID),
+                "X-Pod-Name": POD_NAME,
+                "X-In-Flight": str(http_request_in_progress.labels(PIPELINE_ID, STEP_ID, POD_NAME)._value.get())
+            }
+            return jsonify({"status": "forwarded", "next": chosen_next}), 202, headers
 
-    try:
-        # r = requests.post(next_url, files=files)
-        # # Unisci gli header di risposta con il tempo dello step corrente
-        # combined_headers = dict(r.headers)
-        # combined_headers.update(step_header)
-        
-        # #return r.content, r.status_code, r.headers.items()
-        # return r.content, r.status_code, combined_headers.items()
-
-        fwd_headers = {"X-Test-ID": g.test_id}
-        threading.Thread(
-            target=send_to_next_step_async,
-            args=(next_url, files, fwd_headers),
-            daemon=True
-        ).start()
-        
-        # risposta immediata
-        # headers = {
-        #     **step_header,
-        #     "X-Forwarded-To": str(chosen_next),
-        # }
-        headers = {
-            #**step_header,
-            "X-Step-ID": str(STEP_ID),
-            "X-Pod-Name": POD_NAME,
-            "X-In-Flight": str(http_request_in_progress.labels(
-                PIPELINE_ID, STEP_ID, POD_NAME)._value.get()
-            )
-        }
-
-        return jsonify({"status": "forwarded"}), 202, headers
-    except Exception as e:
-        print(f"[ERROR] /process: {e}")
-        traceback.print_exc()
-        return jsonify({"error": f"Errore invio a step {chosen_next}: {e}"}), 500    
-
-
-
-#if __name__ == "__main__":
-#    app.run(host="0.0.0.0", port=int(SERVICE_PORT))
+        except Exception as e:
+            print(f"[ERROR] /process: {e}")
+            traceback.print_exc()
+            return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     import logging
-    logging.basicConfig(level=logging.INFO)  # Mostra INFO e ERROR
+    logging.basicConfig(level=logging.INFO)
+    
+    # Avvio thread per configurazione K8s
     threading.Thread(target=update_kubernetes_config, daemon=True).start()
-    app.run(host="0.0.0.0", port=int(SERVICE_PORT))
-
+    
+    # IMPORTANTE: threaded=True serve per far rispondere il pod alle metriche 
+    # mentre sta elaborando un'immagine (altrimenti Prometheus va in timeout)
+    app.run(host="0.0.0.0", port=int(SERVICE_PORT), threaded=True)
