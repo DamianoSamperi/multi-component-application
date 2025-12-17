@@ -11,10 +11,8 @@ from kubernetes import client, config as k8s_config
 from prometheus_client import Counter, Gauge, generate_latest, CONTENT_TYPE_LATEST, Histogram
 import traceback
 
-
 USE_LIGHT = os.getenv("USE_LIGHT", "false").lower() == "true"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-
 
 
 app = Flask(__name__)
@@ -39,7 +37,7 @@ def drain():
     accepting_requests = False
     print("[INFO] Ricevuto comando di draining")
     return jsonify({"status": "draining"}), 200
-    
+
 http_requests_total = Counter(
     'http_requests_total',
     'Numero totale di richieste HTTP ricevute per step',
@@ -78,7 +76,53 @@ def after_request(response):
 def metrics():
     return generate_latest(), 200, {'Content-Type': CONTENT_TYPE_LATEST}
 
+# Cache globale protetta da un Lock per evitare problemi di concorrenza
+active_steps_cache = set()
+cache_lock = threading.Lock()
 
+def update_kubernetes_config():
+    """Aggiorna la cache degli step attivi ogni 10 secondi."""
+    global active_steps_cache
+    print("[INFO] Thread di aggiornamento configurazione K8s avviato.")
+    
+    # Carica la config una volta sola per il thread
+    try:
+        k8s_config.load_incluster_config()
+        v1 = client.CoreV1Api()
+    except Exception as e:
+        print(f"[ERROR] Impossibile caricare config K8s: {e}")
+        return
+
+    while True:
+        try:
+            # Recupera le ConfigMap
+            configmaps = v1.list_namespaced_config_map(
+                namespace=NAMESPACE,
+                label_selector=f"pipeline_id={PIPELINE_ID}"
+            )
+            
+            new_active_steps = set()
+            for cm in configmaps.items:
+                try:
+                    cm_data = yaml.safe_load(cm.data.get("PIPELINE_CONFIG", "{}"))
+                    steps = cm_data.get("steps", [])
+                    for step in steps:
+                        s_id = step.get("id")
+                        if s_id is not None:
+                            new_active_steps.add(str(s_id))
+                except Exception as e:
+                    print(f"[ERROR] Parsing ConfigMap {cm.metadata.name}: {e}")
+
+            # Aggiorna la cache in modo sicuro
+            with cache_lock:
+                active_steps_cache = new_active_steps
+            
+            # print(f"[DEBUG] Cache aggiornata: {active_steps_cache}")
+            
+        except Exception as e:
+            print(f"[ERROR] Durante l'aggiornamento cache K8s: {e}")
+        
+        time.sleep(10) # Controlla i cambiamenti ogni 10 secondi
 
 # --- Lettura config pipeline da env ---
 pipeline_yaml = os.getenv("PIPELINE_CONFIG", '{"steps":[]}')
@@ -173,15 +217,26 @@ def process():
         # Header custom con il tempo di questo step
         #step_header = {f"X-Step-{STEP_ID}-Time": str(elapsed)}
     
-        # 2️⃣ Determina il prossimo step dalla config
+    # 2️⃣ Determina il prossimo step dalla config locale
         next_steps = current_step_conf.get("next_step", None)
         if not next_steps:
-            # Ultimo step → restituisci output al client
-            output = io.BytesIO()
-            image.save(output, format="JPEG")
-            output.seek(0)
-            headers = {"Content-Type": "image/jpeg", **step_header}
+            # Logica ultimo step (restituisci immagine)
+            # ...
             return output.read(), 200, headers
+
+        if isinstance(next_steps, (str, int)):
+            next_steps = [next_steps]
+
+        # 3️⃣ Leggi dalla CACHE invece che da Kubernetes
+        with cache_lock:
+            # Copia locale della cache per evitare di tenere il lock troppo a lungo
+            current_active = list(active_steps_cache)
+
+        # 4️⃣ Filtra i prossimi step
+        available_next = [s for s in next_steps if str(s) in current_active]
+        
+        if not available_next:
+            return jsonify({"error": "Nessun prossimo step attivo"}), 500
     
         if isinstance(next_steps, (str, int)):
             next_steps = [next_steps]
@@ -189,59 +244,6 @@ def process():
         print(f"[ERROR] /process: {e}")
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
-    # 3️⃣ Carica config Kubernetes e verifica ConfigMap della pipeline
-    try:
-        k8s_config.load_incluster_config()
-        v1 = client.CoreV1Api()
-        # Lista tutte le ConfigMap della pipeline
-        configmaps = v1.list_namespaced_config_map(
-            namespace=NAMESPACE,
-            label_selector=f"pipeline_id={PIPELINE_ID}"
-        )
-    except Exception as e:
-        print(f"[ERROR] /process: {e}")
-        traceback.print_exc()
-        return jsonify({"error": f"Errore API Kubernetes: {e}"}), 500
-
-    #active_steps = set()
-    #for cm in configmaps.items:
-    #    # Ricava lo step_id dalla ConfigMap
-    #    cm_data = yaml.safe_load(cm.data.get("PIPELINE_CONFIG", "{}"))
-    #    step_id = cm_data.get("step_id")
-    #    if step_id is not None:
-    #        active_steps.add(str(step_id))
-    active_steps = set()
-    for cm in configmaps.items:
-        try:
-            cm_data = yaml.safe_load(cm.data.get("PIPELINE_CONFIG", "{}"))
-            steps = cm_data.get("steps", [])
-            logging.info(f"Processing ConfigMap: {cm.metadata.name}")
-            for step in steps:
-                step_id = step.get("id")
-                if step_id is not None:
-                    active_steps.add(str(step_id))
-                    logging.info(f"Step ID {step_id} aggiunto da ConfigMap {cm.metadata.name}")
-        except Exception as e:
-            print(f"[ERROR] /process: {e}")
-            traceback.print_exc()
-            logging.error(f"Errore nel processare ConfigMap {cm.metadata.name}: {e}")
-
-
-    # 4️⃣ Filtra i prossimi step in base alle ConfigMap attive
-    available_next = [s for s in next_steps if str(s) in active_steps]
-    logging.info(f"Next steps: {next_steps}")
-    logging.info(f"Available next steps: {available_next}")
-    if not available_next:
-        return jsonify({"error": "Nessun prossimo step attivo per questa pipeline"}), 500
-
-    # --- Logica di selezione ---
-    preferred = current_step_conf.get("preferred_next")
-    if preferred and str(preferred) in available_next:
-        chosen_next = preferred
-        logging.info(f"Preferred step {preferred} selected")
-    else:
-        chosen_next = sorted(available_next)[0]
-        logging.info(f"Preferred step {preferred} not in available steps")
 
     # 5️⃣ Costruisci URL per il prossimo step (scoped alla pipeline)
     next_url = (
@@ -300,5 +302,6 @@ def process():
 if __name__ == "__main__":
     import logging
     logging.basicConfig(level=logging.INFO)  # Mostra INFO e ERROR
+    threading.Thread(target=update_kubernetes_config, daemon=True).start()
     app.run(host="0.0.0.0", port=int(SERVICE_PORT))
 
