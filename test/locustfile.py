@@ -284,6 +284,7 @@ def export_realtime_metrics(environment):
         writer = csv.writer(f)
         writer.writerow([
             time.time(),
+            TEST_ID,
             environment.stats.total.current_rps,
             environment.stats.total.fail_ratio,
             environment.runner.user_count if environment.runner else 0
@@ -296,7 +297,7 @@ def on_test_start(environment, **_):
     TEST_START_TS = time.time()
 
     with open("realtime_rps.csv", "w", newline="") as f:
-        csv.writer(f).writerow(["timestamp", "rps", "fail_ratio", "users"])
+        csv.writer(f).writerow(["timestamp", "test_id", "rps", "fail_ratio", "users"])
     export_realtime_metrics(environment)
 
 # ==========================
