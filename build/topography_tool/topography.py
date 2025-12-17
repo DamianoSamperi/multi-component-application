@@ -153,7 +153,7 @@ def generate_deployments(steps: List[Dict], pipeline_prefix: str, namespace="def
         gpu_count = int(step.get("gpu", 0))
 
         if gpu_count > 0:
-            container["resources"] = {"requests": {"memory": "512Mi","nvidia.com/gpu.shared": gpu_count},"limits": {"nvidia.com/gpu.shared":  gpu_count ,  "memory": "2.5Gi"}}
+            container["resources"] = {"requests": {"memory": "1Gi","nvidia.com/gpu.shared": gpu_count},"limits": {"nvidia.com/gpu.shared":  gpu_count ,  "memory": "3.5Gi"}}
         else:
             container["resources"] = {"requests": {"memory": "512Mi"},"limits": {"memory": "768Mi"}}
 
