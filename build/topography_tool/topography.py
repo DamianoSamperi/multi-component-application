@@ -175,19 +175,6 @@ def generate_deployments(steps: List[Dict], pipeline_prefix: str, namespace="def
             container["volumeMounts"] = volume_mounts
         # NodeSelector
         #node_selector = step.get("nodeSelector")
-
-        # deployment_spec = {
-        #     "replicas": 1,
-        #     "selector": {"matchLabels": {"app": "nn-service", "step": str(step_id), "pipeline_id": pipeline_prefix}},
-        #     "template": {
-        #         "metadata": {"labels": {"app": "nn-service", "step": str(step_id), "pipeline_id": pipeline_prefix}},
-        #         "spec": {
-        #             "schedulerName": "scheduler-plugins-scheduler",
-        #             "containers": [container],
-        #             "volumes": volumes if volumes else [],
-        #         },
-        #     },
-        # }
         
         deployment_spec = {
             "replicas": 1,
