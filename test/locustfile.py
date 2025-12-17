@@ -21,6 +21,20 @@ TEST_ID = f"locust-{uuid.uuid4().hex[:8]}"
 TEST_START_TS = None
 TEST_STOP_TS = None
 REALTIME_RUNNING = True
+# ==========================
+# PROM QUERIES (GLOBALI)
+# ==========================
+
+Q_RPS_TS = """
+sum(rate(step_processing_time_seconds_count[1m])) by (step_id)
+"""
+
+Q_P95_TS = """
+histogram_quantile(
+  0.95,
+  sum(rate(step_processing_time_seconds_bucket[1m])) by (le, step_id)
+)
+"""
 
 # ==========================
 # FILES
@@ -67,8 +81,8 @@ def prom_query_range(query, start, end, step):
 def export_prom_timeseries(test_id, start_ts, end_ts):
     step = 60  # 1 punto al minuto
 
-    rps_ts = prom_query_range(q_rps_ts, start_ts, end_ts, step)
-    p95_ts = prom_query_range(q_p95_ts, start_ts, end_ts, step)
+    rps_ts = prom_query_range(Q_RPS_TS, start_ts, end_ts, step)
+    p95_ts = prom_query_range(Q_P95_TS, start_ts, end_ts, step)
 
     with open("prom_timeseries.csv", "w", newline="") as f:
         w = csv.writer(f)
@@ -315,16 +329,7 @@ def prom_export_summary(test_id: str, duration_s: int):
     q_rps = f'''
     sum(rate(step_processing_time_seconds_count{{test_id="{test_id}"}}[{rng}])) by (step_id)
     '''
-    q_rps_ts = """
-    sum(rate(step_processing_time_seconds_count[1m])) by (step_id)
-    """
-    
-    q_p95_ts = """
-    histogram_quantile(
-      0.95,
-      sum(rate(step_processing_time_seconds_bucket[1m])) by (le, step_id)
-    )
-    """
+
 
     avg_res = prom_query_instant(q_avg)
     p95_res = prom_query_instant(q_p95)
