@@ -60,6 +60,10 @@ raw_file.flush()
 # ==========================
 _last_metrics = {"time": 0, "gpu": {}, "http": {}}
 
+# GLOBAL RPS
+_last_req_count = 0
+_last_ts = None
+
 def prom_query_instant(query: str, timeout=5):
     r = requests.get(f"{PROM_URL}/api/v1/query", params={"query": query}, timeout=timeout)
     r.raise_for_status()
@@ -278,17 +282,33 @@ class PipelineUser(HttpUser):
 # REALTIME LOCUST (rps/users)
 # ==========================
 def export_realtime_metrics(environment):
+    global _last_req_count, _last_ts
+
     if not REALTIME_RUNNING:
         return
+
+    now = time.time()
+    total_reqs = environment.stats.total.num_requests
+
+    if _last_ts is None:
+        rps = 0.0
+    else:
+        dt = now - _last_ts
+        rps = (total_reqs - _last_req_count) / dt if dt > 0 else 0.0
+
+    _last_req_count = total_reqs
+    _last_ts = now
+
     with open("realtime_rps.csv", "a", newline="") as f:
         writer = csv.writer(f)
         writer.writerow([
-            time.time(),
+            now,
             TEST_ID,
-            environment.stats.total.current_rps,
+            round(rps, 3),
             environment.stats.total.fail_ratio,
             environment.runner.user_count if environment.runner else 0
         ])
+
     threading.Timer(1, export_realtime_metrics, args=[environment]).start()
 
 @events.test_start.add_listener
