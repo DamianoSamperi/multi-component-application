@@ -25,16 +25,19 @@ REALTIME_RUNNING = True
 # PROM QUERIES (GLOBALI)
 # ==========================
 
-Q_RPS_TS = """
-sum(rate(step_processing_time_seconds_count[1m])) by (step_id)
-"""
+# finestra abbastanza grande per step lenti (Nano)
+TS_WINDOW = "10m"
 
-Q_P95_TS = """
+Q_RPS_TS = lambda test_id: f'''
+sum(rate(step_processing_time_seconds_count{{test_id="{test_id}"}}[{TS_WINDOW}])) by (step_id)
+'''
+
+Q_P95_TS = lambda test_id: f'''
 histogram_quantile(
   0.95,
-  sum(rate(step_processing_time_seconds_bucket[1m])) by (le, step_id)
+  sum(rate(step_processing_time_seconds_bucket{{test_id="{test_id}"}}[{TS_WINDOW}])) by (le, step_id)
 )
-"""
+'''
 
 # ==========================
 # FILES
@@ -84,9 +87,10 @@ def prom_query_range(query, start, end, step):
     return r.json()["data"]["result"]
 def export_prom_timeseries(test_id, start_ts, end_ts):
     step = 60  # 1 punto al minuto
+  
+    rps_ts = prom_query_range(Q_RPS_TS(test_id), start_ts, end_ts, step)
+    p95_ts = prom_query_range(Q_P95_TS(test_id), start_ts, end_ts, step)
 
-    rps_ts = prom_query_range(Q_RPS_TS, start_ts, end_ts, step)
-    p95_ts = prom_query_range(Q_P95_TS, start_ts, end_ts, step)
 
     with open("prom_timeseries.csv", "w", newline="") as f:
         w = csv.writer(f)
@@ -335,21 +339,24 @@ def prom_export_summary(test_id: str, duration_s: int):
     rng = f"{dur}s"
 
     q_avg = f'''
-    sum(rate(step_processing_time_seconds_sum{{test_id="{test_id}"}}[{rng}])) by (step_id)
+    sum(increase(step_processing_time_seconds_sum{{test_id="{test_id}"}}[{rng}])) by (step_id)
     /
-    sum(rate(step_processing_time_seconds_count{{test_id="{test_id}"}}[{rng}])) by (step_id)
+    sum(increase(step_processing_time_seconds_count{{test_id="{test_id}"}}[{rng}])) by (step_id)
     '''
+
 
     q_p95 = f'''
     histogram_quantile(
       0.95,
-      sum(rate(step_processing_time_seconds_bucket{{test_id="{test_id}"}}[{rng}])) by (le, step_id)
+      sum(increase(step_processing_time_seconds_bucket{{test_id="{test_id}"}}[{rng}])) by (le, step_id)
     )
     '''
-
+  
     q_rps = f'''
-    sum(rate(step_processing_time_seconds_count{{test_id="{test_id}"}}[{rng}])) by (step_id)
+    sum(increase(step_processing_time_seconds_count{{test_id="{test_id}"}}[{rng}])) by (step_id)
+    / {dur}
     '''
+
 
 
     avg_res = prom_query_instant(q_avg)
