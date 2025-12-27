@@ -1,16 +1,34 @@
 apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:
-  name: high-qos
-value: 1000
+  name: low-qos
+  annotations:
+    qos.threshold.min_inflight: "0"
+    qos.threshold.max_inflight: "20"
+value: 100
 globalDefault: false
-description: "Alta priorità per carichi intensivi"
+description: "Bassa priorità: carico normale, nessuna congestione"
 
 ---
 apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:
-  name: low-qos
-value: 100
+  name: medium-qos
+  annotations:
+    qos.threshold.min_inflight: "21"
+    qos.threshold.max_inflight: "60"
+value: 500
 globalDefault: false
-description: "Bassa priorità per pod con bassa richiesta Gpu"
+description: "Priorità media: backlog crescente, attenzione"
+
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: high-qos
+  annotations:
+    qos.threshold.min_inflight: "61"
+    qos.threshold.max_inflight: "100000"
+value: 1000
+globalDefault: false
+description: "Alta priorità: congestione severa"
