@@ -9,8 +9,8 @@ from datetime import datetime
 PROM_URL = os.getenv("PROMETHEUS_URL", "http://prometheus.monitoring.svc.cluster.local:9090")
 CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", "30"))
 NAMESPACE = os.getenv("PIPELINE_NAMESPACE", "default")
-THRESHOLD_RPS = float(os.getenv("THRESHOLD_RPS", "5.0"))  # soglia
 LOW_PRIORITY_CLASS = os.getenv("LOW_PRIORITY_CLASS", "low-qos")
+MEDIUM_PRIORITY_CLASS = os.getenv("LOW_PRIORITY_CLASS", "low-qos")
 HIGH_PRIORITY_CLASS = os.getenv("HIGH_PRIORITY_CLASS", "high-qos")
 
 # ===== SETUP =====
@@ -113,10 +113,22 @@ def update_configmap_priority(cm_name, new_priority, step_id):
                 wait_for_pod_not_ready(pod.metadata.name)
         restart_deployment_for_step(pipeline_id=cm.metadata.labels["pipeline_id"], step_id=step_id)
 
+def choose_priority(in_flight: float) -> str:
+    if in_flight >= 61:
+        return HIGH_PRIORITY_CLASS
+    elif in_flight >= 21:
+        return MEDIUM_PRIORITY_CLASS
+    else:
+        return LOW_PRIORITY_CLASS
 
 def evaluate_priority():
     """Analizza le metriche Prometheus e aggiorna priorità solo per gli step interessati."""
-    query = 'sum(rate(http_requests_total{namespace="default"}[1m])) by (pipeline_id, step_id)'
+    #query = 'sum(rate(http_requests_total{namespace="default"}[1m])) by (pipeline_id, step_id)'
+    query = '''
+    sum(http_requests_in_progress)
+    by (pipeline_id, step_id)
+    '''
+
     results = query_prometheus(query)
 
     if not results:
@@ -126,15 +138,21 @@ def evaluate_priority():
     for metric in results:
         pipeline_id = metric["metric"]["pipeline_id"]
         step_id = int(metric["metric"]["step_id"])
-        rps = float(metric["value"][1])
+        in_flight = float(metric["value"][1])
 
-        new_priority = HIGH_PRIORITY_CLASS if rps > THRESHOLD_RPS else LOW_PRIORITY_CLASS
+
+        new_priority = choose_priority(in_flight)
 
         # Cerca la ConfigMap corrispondente a questa pipeline
         cms = v1.list_namespaced_config_map(namespace=NAMESPACE, label_selector=f"pipeline_id={pipeline_id}").items
         for cm in cms:
             update_configmap_priority(cm.metadata.name, new_priority, step_id)
-        print(f"[INFO] Step {step_id} della pipeline {pipeline_id} - RPS={rps:.2f}, priority={new_priority}", flush=True)
+        print(
+            f"[INFO] Pipeline={pipeline_id} Step={step_id} "
+            f"in_flight={in_flight:.1f} → priority={new_priority}",
+            flush=True
+        )
+
 
 def main():
     while True:
