@@ -18,6 +18,10 @@ for gpu in gpus:
     
 _global_infer_fn = None
 _model_ready = False
+PROFILE_RESOLUTION = {
+    "light": 320,
+    "heavy": 640,
+}
 
 def load_model():
     global _global_infer_fn, _model_ready
@@ -45,7 +49,7 @@ class Classifier:
     def ready(self):
         return _model_ready 
 
-    def run(self, image: Image.Image):
+    def run(self, image: Image.Image, load_profile="light"):
         global _global_infer_fn, _model_ready
 
         if not _model_ready or _global_infer_fn is None:
@@ -54,8 +58,9 @@ class Classifier:
         # 1. Pre-processing (Eseguito in parallelo, usa solo CPU/RAM)
         np_img = np.array(image, dtype=np.uint8)
         h_orig, w_orig = np_img.shape[:2]
-        target_w, target_h = 320, 320
-        np_resized = cv2.resize(np_img, (target_w, target_h))
+        size = PROFILE_RESOLUTION.get(load_profile, 320)
+        # target_w, target_h = 320, 320
+        np_resized = cv2.resize(np_img, (size, size))
         input_tensor = tf.expand_dims(np_resized, 0)
 
         # 2. Sezione Critica: Accesso alla GPU
