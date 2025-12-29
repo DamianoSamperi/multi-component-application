@@ -7,8 +7,11 @@ import threading
 import time
 import uuid
 import requests
+import random
 
 from locust import HttpUser, task, events, LoadTestShape
+
+
 
 # ==========================
 # CONFIG
@@ -21,6 +24,8 @@ TEST_ID = f"locust-{uuid.uuid4().hex[:8]}"
 TEST_START_TS = None
 TEST_STOP_TS = None
 REALTIME_RUNNING = True
+LOAD_PROFILE = "light"
+
 # ==========================
 # PROM QUERIES (GLOBALI)
 # ==========================
@@ -221,6 +226,17 @@ def node_ip_for_step(step_idx: int):
 # ==========================
 # REQUEST LISTENER -> raw_timings.csv
 # ==========================
+def pick_load_profile():
+    """
+    Ritorna il profilo di carico per questa request.
+    - light  → 100% light
+    - heavy  → 100% heavy
+    - medium → 70% heavy, 30% light
+    """
+    if LOAD_PROFILE == "medium":
+        return "heavy" if random.random() < 0.7 else "light"
+    return LOAD_PROFILE
+  
 @events.request.add_listener
 def log_request(request_type, name, response_time, response_length, exception, **kwargs):
     gpu_dict, http_dict = get_metrics_cached()
@@ -263,8 +279,12 @@ class PipelineUser(HttpUser):
             return
 
         img = "your_image.jpg"
-        headers = {"X-Test-ID": TEST_ID}
+        profile = pick_load_profile()
 
+        headers = {
+            "X-Test-ID": TEST_ID,
+            "X-Load-Profile": profile
+        }
         for name, base_url in ENTRYPOINTS:
             self.client.base_url = base_url
             with open(img, "rb") as f:
@@ -416,6 +436,12 @@ if USE_SHAPE:
         parser.add_argument("--curve-users", type=int, default=CURVE_USERS)
         parser.add_argument("--curve-duration", type=int, default=CURVE_DURATION)
         parser.add_argument("--curve-spawn-rate", type=float, default=CURVE_SPAWN_RATE)
+        parser.add_argument(
+            "--load-profile",
+            choices=["light", "medium", "heavy"],
+            default="light",
+            help="GPU load profile for requests"
+        )
 
     @events.init.add_listener
     def _(environment, **kwargs):
@@ -424,6 +450,7 @@ if USE_SHAPE:
         CURVE_USERS = environment.parsed_options.curve_users
         CURVE_DURATION = environment.parsed_options.curve_duration
         CURVE_SPAWN_RATE = environment.parsed_options.curve_spawn_rate
+        LOAD_PROFILE = environment.parsed_options.load_profile
 
     class CustomShape(LoadTestShape):
         def tick(self):
