@@ -16,6 +16,7 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 
 app = Flask(__name__)
+DEFAULT_LOAD_PROFILE = os.getenv("DEFAULT_LOAD_PROFILE", "light")
 accepting_requests = True
 
 @app.route("/readyz")
@@ -62,9 +63,21 @@ step_latency = Histogram(
 def before_request():
     g.start_time = time.time()
     g.test_id = request.headers.get("X-Test-ID", "unknown")
-    http_request_in_progress.labels(PIPELINE_ID, STEP_ID, POD_NAME).inc()
-    http_requests_total.labels(request.method, request.path, PIPELINE_ID, STEP_ID, POD_NAME).inc()
 
+    # 🔹 NUOVO: profilo di carico
+    g.load_profile = request.headers.get(
+        "X-Load-Profile",
+        DEFAULT_LOAD_PROFILE
+    )
+
+    http_request_in_progress.labels(PIPELINE_ID, STEP_ID, POD_NAME).inc()
+    http_requests_total.labels(
+        request.method,
+        request.path,
+        PIPELINE_ID,
+        STEP_ID,
+        POD_NAME
+    ).inc()
 @app.after_request
 def after_request(response):
     elapsed = time.time() - g.start_time
@@ -211,7 +224,8 @@ def process():
             # Esecuzione della pipeline (con il tempo misurato per Prometheus)
             with step_latency.labels(PIPELINE_ID, STEP_ID, POD_NAME, g.test_id).time():
                 for step in pipeline:
-                    image = step.run(image)
+                    image = step.run(image, load_profile=g.load_profile)
+
 
             # 2️⃣ Determina il prossimo step dalla config locale
             next_steps = current_step_conf.get("next_step", None)
@@ -252,7 +266,10 @@ def process():
             buf.seek(0)
             files = {"image": ("frame.jpg", buf, "image/jpeg")}
             
-            fwd_headers = {"X-Test-ID": g.test_id}
+            fwd_headers = {
+                "X-Test-ID": g.test_id,
+                "X-Load-Profile": g.load_profile,  # 🔹 PROPAGAZIONE
+            }
             threading.Thread(
                 target=send_to_next_step_async,
                 args=(next_url, files, fwd_headers),
