@@ -23,7 +23,7 @@ class Upscaler:
             "-f", "jpg"
         ]
 
-    def run(self, image):
+    def run(self, image, load_profile="light"):
         tmp_dir = tempfile.gettempdir()
         uid = uuid.uuid4().hex
         input_path = os.path.join(tmp_dir, f"input_{uid}.jpg")
@@ -31,7 +31,9 @@ class Upscaler:
         image.save(input_path, format="JPEG")
 
         cmd = self.cmd_base + ["-i", input_path, "-o", output_path, "-s", self.scale_factor]
-        if self.tta:
+        # 🔹 override TTA in base al profilo di carico
+        use_tta = self.tta or (load_profile == "heavy")
+        if  use_tta:
             cmd.append("-x")
 
         attempt = 0
