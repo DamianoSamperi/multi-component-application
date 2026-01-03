@@ -376,19 +376,70 @@ def prom_export_summary(test_id: str, duration_s: int):
     sum(increase(step_processing_time_seconds_count{{test_id="{test_id}"}}[{rng}])) by (step_id)
     / {dur}
     '''
+    q_gpu_60s = '''
+    avg_over_time(
+      gpu_usage_percentage{job="jetson-exporter"}[60s]
+    )
+    '''
+    
+    q_gpu_test = f'''
+    avg_over_time(
+      gpu_usage_percentage{job="jetson-exporter"}[{dur}s]
+    )
+    '''
+
 
 
 
     avg_res = prom_query_instant(q_avg)
     p95_res = prom_query_instant(q_p95)
     rps_res = prom_query_instant(q_rps)
-
+    gpu_60s_res = prom_query_instant(q_gpu_60s)
+    gpu_test_res = prom_query_instant(q_gpu_test)
+    gpu_60s_map = {}
+    gpu_test_map = {}
     avg_map = {row["metric"].get("step_id", "unknown"): float(row["value"][1]) for row in avg_res}
     p95_map = {row["metric"].get("step_id", "unknown"): float(row["value"][1]) for row in p95_res}
     rps_map = {row["metric"].get("step_id", "unknown"): float(row["value"][1]) for row in rps_res}
 
-    step_ids = sorted(set(avg_map.keys()) | set(p95_map.keys()) | set(rps_map.keys()))
+        for r in gpu_60s_res:
+        inst = r["metric"].get("instance", "")
+        node_ip = inst.split(":")[0]
+        gpu_60s_map[node_ip] = float(r["value"][1])
 
+    for r in gpu_test_res:
+        inst = r["metric"].get("instance", "")
+        node_ip = inst.split(":")[0]
+        gpu_test_map[node_ip] = float(r["value"][1])
+
+    # ------------------------
+    # WRITE GPU SUMMARY
+    # ------------------------
+    write_header = not os.path.exists("gpu_summary.csv")
+
+    with open("gpu_summary.csv", "a", newline="") as f:
+        w = csv.writer(f)
+        if write_header:
+            w.writerow([
+                "test_id",
+                "duration_s",
+                "node_ip",
+                "gpu_avg_60s",
+                "gpu_avg_test"
+            ])
+
+        all_nodes = set(gpu_60s_map) | set(gpu_test_map)
+        for node in sorted(all_nodes):
+            w.writerow([
+                test_id,
+                dur,
+                node,
+                f"{gpu_60s_map.get(node, 0):.2f}",
+                f"{gpu_test_map.get(node, 0):.2f}",
+            ])
+          
+    step_ids = sorted(set(avg_map.keys()) | set(p95_map.keys()) | set(rps_map.keys()))
+  
     with open("prom_summary.csv", "w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["test_id", "duration_s", "step_id", "avg_s", "p95_s", "rps"])
