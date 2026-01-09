@@ -3,8 +3,7 @@ from kubernetes import client, config
 import yaml
 import uuid
 from typing import Union, List, Dict
-import time
-import threading
+
 
 
 app = Flask(__name__)
@@ -263,40 +262,7 @@ def generate_services(steps: List[Dict], pipeline_prefix: str, namespace="defaul
     return services
 
 
-def global_recovery_loop():
-    config.load_incluster_config()
-    v1 = client.CoreV1Api()
 
-    while True:
-        pods = v1.list_namespaced_pod(
-            namespace="default",
-            label_selector="pipeline_id"
-        ).items
-
-        for pod in pods:
-            annotations = pod.metadata.annotations or {}
-            phase = annotations.get("pipeline.phase", "running")
-
-            if pod.spec.scheduling_gates and phase != "initial":
-                v1.patch_namespaced_pod(
-                    name=pod.metadata.name,
-                    namespace="default",
-                    body={
-                        "spec": {"schedulingGates": []},
-                        "metadata": {
-                            "annotations": {
-                                "pipeline.phase": "running"
-                            }
-                        }
-                    }
-                )
-
-        time.sleep(2)
-
-threading.Thread(
-    target=global_recovery_loop,
-    daemon=True
-).start()
 
 # --- Endpoints ---
 @app.route("/pipeline", methods=["POST"])
@@ -328,25 +294,6 @@ def create_pipeline():
             results.append(f"✅ Deployment creato per {dep['metadata']['name']}")
 
 
-        time.sleep(0.5)
-        pods = v1.list_namespaced_pod(
-            namespace="default",
-            label_selector=f"pipeline_id={pipeline_id}"
-        ).items
-        
-        for pod in pods:
-            v1.patch_namespaced_pod(
-                name=pod.metadata.name,
-                namespace="default",
-                body={
-                    "metadata": {
-                        "annotations": {
-                            "pipeline.phase": "initial"
-                        }
-                    }
-                }
-    )
-
         # --- Creazione Service ---
         services = generate_services(steps, pipeline_id)
         for svc in services:
@@ -376,6 +323,42 @@ def delete_pipeline(pipeline_id):
         v1.delete_collection_namespaced_service(namespace="default", label_selector=f"pipeline_id={pipeline_id}", body=delete_opts)
 
         return jsonify({"status": "deleted", "pipeline_id": pipeline_id})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+        
+@app.route("/pipeline", methods=["DELETE"])
+def delete_all_pipelines():
+    try:
+        config.load_incluster_config()
+        v1 = client.CoreV1Api()
+        apps_v1 = client.AppsV1Api()
+
+        delete_opts = client.V1DeleteOptions()
+
+        # selettore che matcha TUTTE le risorse con pipeline_id
+        selector = "pipeline_id"
+
+        apps_v1.delete_collection_namespaced_deployment(
+            namespace="default",
+            label_selector=selector,
+            body=delete_opts
+        )
+        v1.delete_collection_namespaced_config_map(
+            namespace="default",
+            label_selector=selector,
+            body=delete_opts
+        )
+        v1.delete_collection_namespaced_service(
+            namespace="default",
+            label_selector=selector,
+            body=delete_opts
+        )
+
+        return jsonify({
+            "status": "deleted",
+            "scope": "all-pipelines"
+        })
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
