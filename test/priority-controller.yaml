@@ -10,31 +10,33 @@ metadata:
   namespace: priority-controller
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
+kind: ClusterRole
 metadata:
-  name: priority-controller-role
-  namespace: default
+  name: priority-controller-cluster-role
 rules:
-  - apiGroups: [""]
-    resources: ["configmaps"]
-    verbs: ["get", "list", "watch", "update", "patch"]
-  - apiGroups: ["scheduling.k8s.io"]
-    resources: ["priorityclasses"]
-    verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["configmaps", "pods", "nodes"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "watch", "patch"]
+- apiGroups: ["scheduling.k8s.io"]
+  resources: ["priorityclasses"]
+  verbs: ["get", "list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
+kind: ClusterRoleBinding
 metadata:
-  name: priority-controller-rb
-  namespace: default
-subjects:
-  - kind: ServiceAccount
-    name: priority-controller-sa
-    namespace: priority-controller
+  name: priority-controller-cluster-rb
 roleRef:
-  kind: Role
-  name: priority-controller-role
   apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: priority-controller-cluster-role
+subjects:
+- kind: ServiceAccount
+  name: priority-controller-sa
+  namespace: priority-controller
+
 ---
 apiVersion: apps/v1
 kind: Deployment
