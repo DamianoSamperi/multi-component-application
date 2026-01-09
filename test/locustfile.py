@@ -8,7 +8,7 @@ import time
 import uuid
 import requests
 import random
-
+import os
 from locust import HttpUser, task, events, LoadTestShape
 
 
