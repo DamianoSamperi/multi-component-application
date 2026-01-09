@@ -10,9 +10,11 @@ PROM_URL = os.getenv("PROMETHEUS_URL", "http://prometheus.monitoring.svc.cluster
 CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", "30"))
 NAMESPACE = os.getenv("PIPELINE_NAMESPACE", "default")
 LOW_PRIORITY_CLASS = os.getenv("LOW_PRIORITY_CLASS", "low-qos")
-MEDIUM_PRIORITY_CLASS = os.getenv("LOW_PRIORITY_CLASS", "low-qos")
+MEDIUM_PRIORITY_CLASS = os.getenv("MEDIUM_PRIORITY_CLASS", "medium-qos")
 HIGH_PRIORITY_CLASS = os.getenv("HIGH_PRIORITY_CLASS", "high-qos")
-
+PRIORITY_THRESHOLDS = []
+PRIORITY_THRESHOLDS_LAST_RELOAD = 0
+PRIORITY_THRESHOLDS_RELOAD_INTERVAL = 300  # 5 minuti
 # ===== SETUP =====
 try:
     config.load_incluster_config()
@@ -24,6 +26,43 @@ apps_v1 = client.AppsV1Api()
 
 print(f"[INFO] Priority Controller avviato - Prometheus={PROM_URL}, Namespace={NAMESPACE}", flush=True)
 
+def load_priority_thresholds():
+    """
+    Legge le PriorityClass e costruisce una lista tipo:
+    [
+      {"name": "low-qos", "min": 0, "max": 20},
+      {"name": "medium-qos", "min": 21, "max": 60},
+      {"name": "high-qos", "min": 61, "max": 100000},
+    ]
+    """
+    api = client.SchedulingV1Api()
+    pcs = api.list_priority_class().items
+
+    thresholds = []
+
+    for pc in pcs:
+        ann = pc.metadata.annotations or {}
+        try:
+            min_v = int(ann.get("qos.threshold.min_inflight", "0"))
+            max_v = int(ann.get("qos.threshold.max_inflight", "0"))
+            thresholds.append({
+                "name": pc.metadata.name,
+                "min": min_v,
+                "max": max_v
+            })
+        except ValueError:
+            continue
+
+    # ordina per min crescente
+    thresholds.sort(key=lambda x: x["min"])
+    print(f"[INFO] QoS thresholds caricati: {thresholds}", flush=True)
+    return thresholds
+def refresh_priority_thresholds_if_needed():
+    global PRIORITY_THRESHOLDS, PRIORITY_THRESHOLDS_LAST_RELOAD
+    now = time.time()
+    if not PRIORITY_THRESHOLDS or (now - PRIORITY_THRESHOLDS_LAST_RELOAD) > PRIORITY_THRESHOLDS_RELOAD_INTERVAL:
+        PRIORITY_THRESHOLDS = load_priority_thresholds()
+        PRIORITY_THRESHOLDS_LAST_RELOAD = now
 
 def notify_pod_drain(pod_ip):
     try:
@@ -198,12 +237,14 @@ def update_configmap_priority(cm_name, new_priority, step_id):
         restart_deployment_for_step(pipeline_id=cm.metadata.labels["pipeline_id"], step_id=step_id)
 
 def choose_priority(in_flight: float) -> str:
-    if in_flight >= 61:
-        return HIGH_PRIORITY_CLASS
-    elif in_flight >= 21:
-        return MEDIUM_PRIORITY_CLASS
-    else:
-        return LOW_PRIORITY_CLASS
+    refresh_priority_thresholds_if_needed()
+
+    for entry in PRIORITY_THRESHOLDS:
+        if entry["min"] <= in_flight <= entry["max"]:
+            return entry["name"]
+
+    # fallback di sicurezza
+    return LOW_PRIORITY_CLASS
 
 def evaluate_priority():
     """Analizza le metriche Prometheus e aggiorna priorità solo per gli step interessati."""
