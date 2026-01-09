@@ -135,6 +135,23 @@ def query_gpu_usage_per_node():
     except Exception as e:
         print("⚠️ GPU query error:", e)
         return {}
+def build_node_name_map():
+    out = subprocess.run(
+        ["kubectl", "get", "nodes", "-o", "wide"],
+        stdout=subprocess.PIPE, text=True, check=True
+    )
+    mapping = {}
+    lines = out.stdout.splitlines()
+    header = lines[0].split()
+    name_idx = header.index("NAME")
+    ip_idx = header.index("INTERNAL-IP")
+
+    for line in lines[1:]:
+        parts = line.split()
+        if len(parts) > max(name_idx, ip_idx):
+            mapping[parts[ip_idx]] = parts[name_idx]
+    return mapping
+NODE_NAME_MAP = build_node_name_map()
 
 def query_http_in_progress_per_step():
     try:
@@ -437,7 +454,90 @@ def prom_export_summary(test_id: str, duration_s: int):
                 f"{gpu_60s_map.get(node, 0):.2f}",
                 f"{gpu_test_map.get(node, 0):.2f}",
             ])
-          
+    # =========================
+    # GPU BY CLASS (nano / orin)
+    # =========================
+    
+    # mappa node_name -> gpu_class
+    NODE_GPU_CLASS = {}
+    for node_name in NODE_NAME_MAP.values():
+        lname = node_name.lower()
+        if "nano" in lname:
+            NODE_GPU_CLASS[node_name] = "nano"
+        elif "orin" in lname or "jetson" in lname:
+            NODE_GPU_CLASS[node_name] = "orin"
+    
+    # solo nodi coinvolti nella pipeline (IP)
+    pipeline_node_ips = set(STEP_NODE_MAP.values())
+    
+    gpu_by_class_60s = {}
+    gpu_by_class_test = {}
+    
+    for node_ip, gpu_val in gpu_60s_map.items():
+        if node_ip not in pipeline_node_ips:
+            continue
+    
+        node_name = NODE_NAME_MAP.get(node_ip)
+        if not node_name:
+            continue
+    
+        gpu_class = NODE_GPU_CLASS.get(node_name)
+        if not gpu_class:
+            continue
+    
+        gpu_by_class_60s.setdefault(gpu_class, []).append(gpu_val)
+    
+    for node_ip, gpu_val in gpu_test_map.items():
+        if node_ip not in pipeline_node_ips:
+            continue
+    
+        node_name = NODE_NAME_MAP.get(node_ip)
+        if not node_name:
+            continue
+    
+        gpu_class = NODE_GPU_CLASS.get(node_name)
+        if not gpu_class:
+            continue
+    
+        gpu_by_class_test.setdefault(gpu_class, []).append(gpu_val)
+    
+    avg_gpu_by_class_60s = {
+        k: sum(v) / len(v) if v else 0
+        for k, v in gpu_by_class_60s.items()
+    }
+    
+    avg_gpu_by_class_test = {
+        k: sum(v) / len(v) if v else 0
+        for k, v in gpu_by_class_test.items()
+    }
+    
+    # ------------------------
+    # WRITE GPU BY CLASS CSV
+    # ------------------------
+    write_header = not os.path.exists("gpu_by_class.csv")
+    
+    pipeline_id = "unknown"
+    
+    with open("gpu_by_class.csv", "a", newline="") as f:
+        w = csv.writer(f)
+        if write_header:
+            w.writerow([
+                "test_id",
+                "pipeline_id",
+                "gpu_class",
+                "avg_gpu_60s",
+                "avg_gpu_test"
+            ])
+    
+        for gpu_class in sorted(set(avg_gpu_by_class_60s) | set(avg_gpu_by_class_test)):
+            w.writerow([
+                test_id,
+                pipeline_id,
+                gpu_class,
+                f"{avg_gpu_by_class_60s.get(gpu_class, 0):.2f}",
+                f"{avg_gpu_by_class_test.get(gpu_class, 0):.2f}",
+            ])
+
     step_ids = sorted(set(avg_map.keys()) | set(p95_map.keys()) | set(rps_map.keys()))
   
     with open("prom_summary.csv", "w", newline="") as f:
