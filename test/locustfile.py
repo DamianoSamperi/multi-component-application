@@ -378,7 +378,7 @@ def prom_export_summary(test_id: str, duration_s: int):
     '''
     q_gpu_60s = '''
     avg_over_time(
-      gpu_usage_percentage{{job="jetson-exporter"}}[60s]
+      gpu_usage_percentage{job="jetson-exporter"}[60s]
     )
     '''
     
