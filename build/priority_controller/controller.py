@@ -44,6 +44,83 @@ def wait_for_pod_not_ready(pod_name):
             if cond.type == "Ready" and cond.status == "False":
                 return
         time.sleep(1)
+# ===== GPU FACTORS (QoSAware) =====
+
+FALLBACK_GPU_FACTOR = {
+    "nano": 1,
+    "xavier": 2,
+    "orin": 3,
+}
+
+PRIORITY_MIN_FACTOR = {
+    HIGH_PRIORITY_CLASS: 3,
+    MEDIUM_PRIORITY_CLASS: 2,
+    LOW_PRIORITY_CLASS: 1,
+}
+
+
+GPU_LABEL_KEY = "nvidia.com/device-plugin.config"
+
+GPU_FACTOR = {}
+GPU_FACTOR_LAST_RELOAD = 0
+GPU_FACTOR_RELOAD_INTERVAL = 300  # secondi
+
+
+def load_gpu_factors_from_scheduler():
+    try:
+        cm = v1.read_namespaced_config_map(
+            name="scheduler-config",
+            namespace="scheduler-plugins"
+        )
+
+        raw = cm.data.get("scheduler-config.yaml")
+        if not raw:
+            raise ValueError("scheduler-config.yaml missing")
+
+        cfg = yaml.safe_load(raw)
+
+        for pc in cfg.get("pluginConfig", []):
+            if pc.get("name") == "QoSAware":
+                mappings = pc.get("args", {}).get("mappings", [])
+                factors = {
+                    m["labelValue"]: float(m["factor"])
+                    for m in mappings
+                }
+                print(f"[INFO] GPU_FACTOR caricata da scheduler: {factors}", flush=True)
+                return factors
+
+        raise ValueError("QoSAware config not found")
+
+    except Exception as e:
+        print(f"[WARN] Uso fallback GPU_FACTOR: {e}", flush=True)
+        return FALLBACK_GPU_FACTOR.copy()
+
+
+def refresh_gpu_factors_if_needed():
+    global GPU_FACTOR, GPU_FACTOR_LAST_RELOAD
+    now = time.time()
+    if not GPU_FACTOR or (now - GPU_FACTOR_LAST_RELOAD) > GPU_FACTOR_RELOAD_INTERVAL:
+        GPU_FACTOR = load_gpu_factors_from_scheduler()
+        GPU_FACTOR_LAST_RELOAD = now
+
+
+def pod_already_on_suitable_node(pod, new_priority):
+    refresh_gpu_factors_if_needed()
+
+    node_name = pod.spec.node_name
+    if not node_name:
+        return False
+
+    node = v1.read_node(node_name)
+    gpu_class = node.metadata.labels.get(GPU_LABEL_KEY)
+    if not gpu_class:
+        return False
+
+    node_factor = GPU_FACTOR.get(gpu_class, 0)
+    required_factor = PRIORITY_MIN_FACTOR.get(new_priority, 0)
+
+    return node_factor >= required_factor
+
 def query_prometheus(query: str):
     """Esegue una query Prometheus e restituisce i risultati come lista di dict."""
     url = f"{PROM_URL}/api/v1/query"
@@ -108,6 +185,13 @@ def update_configmap_priority(cm_name, new_priority, step_id):
         # Dopo aver aggiornato la ConfigMap, notifichiamo i pod attivi
         pods = get_pods_for_step(pipeline_id=cm.metadata.labels["pipeline_id"], step_id=step_id)
         for pod in pods:
+            if pod_already_on_suitable_node(pod, new_priority):
+                print(
+                    f"[SKIP] Pod {pod.metadata.name} già su nodo adeguato "
+                    f"(priority={new_priority})",
+                    flush=True
+                )
+                return
             if pod.status.pod_ip:
                 notify_pod_drain(pod.status.pod_ip)
                 wait_for_pod_not_ready(pod.metadata.name)
