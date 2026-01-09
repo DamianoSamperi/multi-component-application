@@ -4,6 +4,9 @@ import yaml
 import uuid
 from typing import Union, List, Dict
 import time
+import threading
+
+
 app = Flask(__name__)
 
 def flatten_steps(steps: List[Union[Dict, List]]):
@@ -197,10 +200,7 @@ def generate_deployments(steps: List[Dict], pipeline_prefix: str, namespace="def
 
         if node_selector:
             deployment_spec["template"]["spec"]["nodeSelector"] = node_selector
-        # Aggiugno schedulingGates per farli aspettare tutti in coda e riordinarli
-        deployment_spec["template"]["spec"]["schedulingGates"] = [
-            {"name": "pipeline-ready"}
-        ]
+
         # if str(step_id)==0:
         #     deployment_spec["template"]["metadata"] = {
         #                                                     "labels": {"app": "nn-service", "step": str(step_id), "pipeline_id": pipeline_prefix},
@@ -263,6 +263,40 @@ def generate_services(steps: List[Dict], pipeline_prefix: str, namespace="defaul
     return services
 
 
+def global_recovery_loop():
+    config.load_incluster_config()
+    v1 = client.CoreV1Api()
+
+    while True:
+        pods = v1.list_namespaced_pod(
+            namespace="default",
+            label_selector="pipeline_id"
+        ).items
+
+        for pod in pods:
+            annotations = pod.metadata.annotations or {}
+            phase = annotations.get("pipeline.phase", "running")
+
+            if pod.spec.scheduling_gates and phase != "initial":
+                v1.patch_namespaced_pod(
+                    name=pod.metadata.name,
+                    namespace="default",
+                    body={
+                        "spec": {"schedulingGates": []},
+                        "metadata": {
+                            "annotations": {
+                                "pipeline.phase": "running"
+                            }
+                        }
+                    }
+                )
+
+        time.sleep(2)
+
+threading.Thread(
+    target=global_recovery_loop,
+    daemon=True
+).start()
 
 # --- Endpoints ---
 @app.route("/pipeline", methods=["POST"])
@@ -292,46 +326,26 @@ def create_pipeline():
         for dep in deployments:
             apps_v1.create_namespaced_deployment(namespace="default", body=dep)
             results.append(f"✅ Deployment creato per {dep['metadata']['name']}")
-        #Creo un attesa per permettere di creare i pod
-        expected = len(steps)
-        for _ in range(20):  # max ~10s
-            pods = v1.list_namespaced_pod(
-                namespace="default",
-                label_selector=f"pipeline_id={pipeline_id}"
-            ).items
-            if len(pods) >= expected:
-                break
-            time.sleep(0.5)
-            
-        for dep in deployments:
-            apps_v1.patch_namespaced_deployment(
-                name=dep["metadata"]["name"],
-                namespace="default",
-                body={
-                    "spec": {
-                        "template": {
-                            "spec": {
-                                "schedulingGates": None
-                            }
-                        }
-                    }
-                }
-            )
+
+
+        time.sleep(0.5)
         pods = v1.list_namespaced_pod(
             namespace="default",
             label_selector=f"pipeline_id={pipeline_id}"
         ).items
+        
         for pod in pods:
-            if pod.spec.scheduling_gates:
-                v1.patch_namespaced_pod(
-                    name=pod.metadata.name,
-                    namespace="default",
-                    body={
-                        "spec": {
-                            "schedulingGates": []
+            v1.patch_namespaced_pod(
+                name=pod.metadata.name,
+                namespace="default",
+                body={
+                    "metadata": {
+                        "annotations": {
+                            "pipeline.phase": "initial"
                         }
                     }
-                )
+                }
+    )
 
         # --- Creazione Service ---
         services = generate_services(steps, pipeline_id)
