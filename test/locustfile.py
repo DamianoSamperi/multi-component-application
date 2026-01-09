@@ -402,15 +402,15 @@ def prom_export_summary(test_id: str, duration_s: int):
     p95_map = {row["metric"].get("step_id", "unknown"): float(row["value"][1]) for row in p95_res}
     rps_map = {row["metric"].get("step_id", "unknown"): float(row["value"][1]) for row in rps_res}
 
-        for r in gpu_60s_res:
-        inst = r["metric"].get("instance", "")
-        node_ip = inst.split(":")[0]
-        gpu_60s_map[node_ip] = float(r["value"][1])
+    for r in gpu_60s_res:
+      inst = r["metric"].get("instance", "")
+      node_ip = inst.split(":")[0]
+      gpu_60s_map[node_ip] = float(r["value"][1])
 
     for r in gpu_test_res:
-        inst = r["metric"].get("instance", "")
-        node_ip = inst.split(":")[0]
-        gpu_test_map[node_ip] = float(r["value"][1])
+      inst = r["metric"].get("instance", "")
+      node_ip = inst.split(":")[0]
+      gpu_test_map[node_ip] = float(r["value"][1])
 
     # ------------------------
     # WRITE GPU SUMMARY
