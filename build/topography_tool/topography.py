@@ -3,7 +3,7 @@ from kubernetes import client, config
 import yaml
 import uuid
 from typing import Union, List, Dict
-
+import time
 app = Flask(__name__)
 
 def flatten_steps(steps: List[Union[Dict, List]]):
@@ -197,6 +197,10 @@ def generate_deployments(steps: List[Dict], pipeline_prefix: str, namespace="def
 
         if node_selector:
             deployment_spec["template"]["spec"]["nodeSelector"] = node_selector
+        # Aggiugno schedulingGates per farli aspettare tutti in coda e riordinarli
+        deployment_spec["template"]["spec"]["schedulingGates"] = [
+            {"name": "pipeline-ready"}
+        ]
         # if str(step_id)==0:
         #     deployment_spec["template"]["metadata"] = {
         #                                                     "labels": {"app": "nn-service", "step": str(step_id), "pipeline_id": pipeline_prefix},
@@ -288,6 +292,46 @@ def create_pipeline():
         for dep in deployments:
             apps_v1.create_namespaced_deployment(namespace="default", body=dep)
             results.append(f"✅ Deployment creato per {dep['metadata']['name']}")
+        #Creo un attesa per permettere di creare i pod
+        expected = len(steps)
+        for _ in range(20):  # max ~10s
+            pods = v1.list_namespaced_pod(
+                namespace="default",
+                label_selector=f"pipeline_id={pipeline_id}"
+            ).items
+            if len(pods) >= expected:
+                break
+            time.sleep(0.5)
+            
+        for dep in deployments:
+            apps_v1.patch_namespaced_deployment(
+                name=dep["metadata"]["name"],
+                namespace="default",
+                body={
+                    "spec": {
+                        "template": {
+                            "spec": {
+                                "schedulingGates": None
+                            }
+                        }
+                    }
+                }
+            )
+        pods = v1.list_namespaced_pod(
+            namespace="default",
+            label_selector=f"pipeline_id={pipeline_id}"
+        ).items
+        for pod in pods:
+            if pod.spec.scheduling_gates:
+                v1.patch_namespaced_pod(
+                    name=pod.metadata.name,
+                    namespace="default",
+                    body={
+                        "spec": {
+                            "schedulingGates": []
+                        }
+                    }
+                )
 
         # --- Creazione Service ---
         services = generate_services(steps, pipeline_id)
