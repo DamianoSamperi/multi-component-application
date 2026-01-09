@@ -514,16 +514,14 @@ def prom_export_summary(test_id: str, duration_s: int):
     # ------------------------
     # WRITE GPU BY CLASS CSV
     # ------------------------
-    write_header = not os.path.exists("gpu_by_class.csv")
+    write_header = not os.path.exists("gpu_by_device.csv")
     
-    pipeline_id = "unknown"
     
-    with open("gpu_by_class.csv", "a", newline="") as f:
+    with open("gpu_by_device.csv", "a", newline="") as f:
         w = csv.writer(f)
         if write_header:
             w.writerow([
                 "test_id",
-                "pipeline_id",
                 "gpu_class",
                 "avg_gpu_60s",
                 "avg_gpu_test"
@@ -532,7 +530,6 @@ def prom_export_summary(test_id: str, duration_s: int):
         for gpu_class in sorted(set(avg_gpu_by_class_60s) | set(avg_gpu_by_class_test)):
             w.writerow([
                 test_id,
-                pipeline_id,
                 gpu_class,
                 f"{avg_gpu_by_class_60s.get(gpu_class, 0):.2f}",
                 f"{avg_gpu_by_class_test.get(gpu_class, 0):.2f}",
