@@ -14,15 +14,31 @@ kind: ClusterRole
 metadata:
   name: priority-controller-cluster-role
 rules:
+# ConfigMaps (serve update + patch)
 - apiGroups: [""]
-  resources: ["configmaps", "pods", "nodes"]
+  resources: ["configmaps"]
+  verbs: ["get", "list", "watch", "update", "patch"]
+
+# Pods
+- apiGroups: [""]
+  resources: ["pods"]
   verbs: ["get", "list", "watch"]
+
+# Nodes
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "list", "watch"]
+
+# Deployments
 - apiGroups: ["apps"]
   resources: ["deployments"]
   verbs: ["get", "list", "watch", "patch"]
+
+# PriorityClass
 - apiGroups: ["scheduling.k8s.io"]
   resources: ["priorityclasses"]
   verbs: ["get", "list", "watch"]
+
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
