@@ -59,7 +59,8 @@ raw_writer.writerow([
     "status_code",
     "gpu_usage_percentage",
     "http_requests_in_progress",
-    "node_ip"
+    "node_ip",
+    "load_profile"
 ])
 raw_file.flush()
 
@@ -280,6 +281,7 @@ def log_request(request_type, name, response_time, response_length, exception, *
         f"{gpu_val:.2f}",
         f"{http_val:.2f}",
         node_ip or "unknown",
+        LOAD_PROFILE,
     ])
     raw_file.flush()
 
@@ -442,7 +444,8 @@ def prom_export_summary(test_id: str, duration_s: int):
                 "duration_s",
                 "node_ip",
                 "gpu_avg_60s",
-                "gpu_avg_test"
+                "gpu_avg_test",
+                "load_profile"
             ])
 
         all_nodes = set(gpu_60s_map) | set(gpu_test_map)
@@ -453,6 +456,7 @@ def prom_export_summary(test_id: str, duration_s: int):
                 node,
                 f"{gpu_60s_map.get(node, 0):.2f}",
                 f"{gpu_test_map.get(node, 0):.2f}",
+                LOAD_PROFILE,
             ])
     # =========================
     # GPU BY CLASS (nano / orin)
@@ -524,7 +528,8 @@ def prom_export_summary(test_id: str, duration_s: int):
                 "test_id",
                 "gpu_class",
                 "avg_gpu_60s",
-                "avg_gpu_test"
+                "avg_gpu_test",
+                "load_profile"
             ])
     
         for gpu_class in sorted(set(avg_gpu_by_class_60s) | set(avg_gpu_by_class_test)):
@@ -533,13 +538,14 @@ def prom_export_summary(test_id: str, duration_s: int):
                 gpu_class,
                 f"{avg_gpu_by_class_60s.get(gpu_class, 0):.2f}",
                 f"{avg_gpu_by_class_test.get(gpu_class, 0):.2f}",
+                LOAD_PROFILE,
             ])
 
     step_ids = sorted(set(avg_map.keys()) | set(p95_map.keys()) | set(rps_map.keys()))
   
     with open("prom_summary.csv", "w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["test_id", "duration_s", "step_id", "avg_s", "p95_s", "rps"])
+        w.writerow(["test_id", "duration_s", "step_id", "avg_s", "p95_s", "rps","load_profile"])
         for sid in step_ids:
             w.writerow([
                 test_id,
@@ -548,6 +554,7 @@ def prom_export_summary(test_id: str, duration_s: int):
                 f"{avg_map.get(sid, 0):.6f}",
                 f"{p95_map.get(sid, 0):.6f}",
                 f"{rps_map.get(sid, 0):.6f}",
+                LOAD_PROFILE,
             ])
 
     print("📁 Salvato: prom_summary.csv (scoped by test_id)")
@@ -593,7 +600,7 @@ if USE_SHAPE:
 
     @events.init.add_listener
     def _(environment, **kwargs):
-        global CURVE_TYPE, CURVE_USERS, CURVE_DURATION, CURVE_SPAWN_RATE
+        global CURVE_TYPE, CURVE_USERS, CURVE_DURATION, CURVE_SPAWN_RATE, LOAD_PROFILE
         CURVE_TYPE = environment.parsed_options.curve
         CURVE_USERS = environment.parsed_options.curve_users
         CURVE_DURATION = environment.parsed_options.curve_duration
