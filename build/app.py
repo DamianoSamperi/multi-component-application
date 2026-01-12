@@ -227,7 +227,7 @@ def process():
                     image = step.run(image, load_profile=g.load_profile)
 
 
-            # 2️⃣ Determina il prossimo step dalla config locale
+            # Determina il prossimo step dalla config locale
             next_steps = current_step_conf.get("next_step", None)
             
             # Se è l'ultimo step della catena
@@ -240,11 +240,11 @@ def process():
             if isinstance(next_steps, (str, int)):
                 next_steps = [next_steps]
 
-            # 3️⃣ Leggi dalla CACHE aggiornata dal thread di background
+            # Leggi dalla CACHE aggiornata dal thread di background
             with cache_lock:
                 current_active = list(active_steps_cache)
 
-            # 4️⃣ Filtra e seleziona il prossimo step
+            # Filtra e seleziona il prossimo step
             available_next = [s for s in next_steps if str(s) in current_active]
             
             if not available_next:
@@ -257,10 +257,10 @@ def process():
             else:
                 chosen_next = sorted(available_next)[0]
 
-            # 5️⃣ Costruisci URL
+            # Costruisci URL
             next_url = f"http://{PIPELINE_ID}-step-{chosen_next}.{NAMESPACE}.svc.cluster.local:{SERVICE_PORT}/process"
 
-            # 6️⃣ Invia immagine in modo asincrono per non tenere bloccato Locust
+            # Invia immagine in modo asincrono per non tenere bloccato Locust
             buf = io.BytesIO()
             image.save(buf, format="JPEG")
             buf.seek(0)
@@ -295,6 +295,6 @@ if __name__ == "__main__":
     # Avvio thread per configurazione K8s
     threading.Thread(target=update_kubernetes_config, daemon=True).start()
     
-    # IMPORTANTE: threaded=True serve per far rispondere il pod alle metriche 
+    # threaded=True serve per far rispondere il pod alle metriche 
     # mentre sta elaborando un'immagine (altrimenti Prometheus va in timeout)
     app.run(host="0.0.0.0", port=int(SERVICE_PORT), threaded=True)
