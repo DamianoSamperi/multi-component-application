@@ -178,34 +178,42 @@ def get_metrics_cached():
 # ==========================
 # DISCOVER ENTRYPOINTS
 # ==========================
+NODE_PORT = 32400  # step-0 NodePort fisso
+NODE_IPS = get_node_ips()
 def get_pipeline_entrypoints():
-    pod_list = subprocess.run(
-        ["kubectl", "get", "pods", "--no-headers", "-o", "custom-columns=:metadata.name"],
-        stdout=subprocess.PIPE, text=True, check=True
-    )
-    pod = next((p for p in pod_list.stdout.splitlines() if "step-0" in p), None)
-    if not pod:
+    if not NODE_IPS:
         return []
+    # basta UN endpoint, kube-proxy fa il resto
+    node_ip = random.choice(NODE_IPS)
+    return [("step-0", f"http://{node_ip}:{NODE_PORT}")]
+# def get_pipeline_entrypoints():
+#     pod_list = subprocess.run(
+#         ["kubectl", "get", "pods", "--no-headers", "-o", "custom-columns=:metadata.name"],
+#         stdout=subprocess.PIPE, text=True, check=True
+#     )
+#     pod = next((p for p in pod_list.stdout.splitlines() if "step-0" in p), None)
+#     if not pod:
+#         return []
 
-    node_ip = subprocess.run(
-        ["kubectl", "get", "pod", pod, "-o", "jsonpath={.status.hostIP}"],
-        stdout=subprocess.PIPE, text=True, check=True
-    ).stdout.strip()
+#     node_ip = subprocess.run(
+#         ["kubectl", "get", "pod", pod, "-o", "jsonpath={.status.hostIP}"],
+#         stdout=subprocess.PIPE, text=True, check=True
+#     ).stdout.strip()
 
-    svc_list = subprocess.run(
-        ["kubectl", "get", "svc",
-         "-o", "jsonpath={range .items[*]}{.metadata.name} {.spec.type} {.spec.ports[0].nodePort}{\"\\n\"}{end}"],
-        stdout=subprocess.PIPE, text=True, check=True
-    )
+#     svc_list = subprocess.run(
+#         ["kubectl", "get", "svc",
+#          "-o", "jsonpath={range .items[*]}{.metadata.name} {.spec.type} {.spec.ports[0].nodePort}{\"\\n\"}{end}"],
+#         stdout=subprocess.PIPE, text=True, check=True
+#     )
 
-    entry = []
-    for line in svc_list.stdout.splitlines():
-        parts = line.split()
-        if len(parts) == 3:
-            name, svc_type, node_port = parts
-            if name.endswith("step-0") and svc_type == "NodePort":
-                entry.append((name, f"http://{node_ip}:{node_port}"))
-    return entry
+#     entry = []
+#     for line in svc_list.stdout.splitlines():
+#         parts = line.split()
+#         if len(parts) == 3:
+#             name, svc_type, node_port = parts
+#             if name.endswith("step-0") and svc_type == "NodePort":
+#                 entry.append((name, f"http://{node_ip}:{node_port}"))
+#     return entry
 
 ENTRYPOINTS = get_pipeline_entrypoints()
 print("Entrypoints:", ENTRYPOINTS)
@@ -214,32 +222,45 @@ print("🧪 TEST_ID:", TEST_ID)
 # ==========================
 # STEP -> NODE MAP
 # ==========================
-def get_step_node_map(prefix="pipeline-"):
+def get_node_ips():
     out = subprocess.run(
-        ["kubectl", "get", "pods", "-n", "default", "--no-headers",
-         "-o", "custom-columns=:metadata.name,:status.hostIP"],
-        stdout=subprocess.PIPE, text=True, check=True
+        [
+            "kubectl", "get", "nodes",
+            "-o",
+            "jsonpath={range .items[*]}{.status.addresses[?(@.type=='InternalIP')].address}{'\\n'}{end}"
+        ],
+        stdout=subprocess.PIPE,
+        text=True,
+        check=True
     )
-    mapping = {}
-    for line in out.stdout.splitlines():
-        parts = line.split()
-        if len(parts) != 2:
-            continue
-        pod, host_ip = parts
-        if prefix in pod and "step-" in pod:
-            step_name = "-".join(pod.split("-")[3:5])  # es. "0-xxxxxx"
-            mapping[step_name] = host_ip
-    return mapping
+    return [ip.strip() for ip in out.stdout.splitlines() if ip.strip()]
 
-STEP_NODE_MAP = get_step_node_map()
-print("Step → Node:", STEP_NODE_MAP)
+# def get_step_node_map(prefix="pipeline-"):
+#     out = subprocess.run(
+#         ["kubectl", "get", "pods", "-n", "default", "--no-headers",
+#          "-o", "custom-columns=:metadata.name,:status.hostIP"],
+#         stdout=subprocess.PIPE, text=True, check=True
+#     )
+#     mapping = {}
+#     for line in out.stdout.splitlines():
+#         parts = line.split()
+#         if len(parts) != 2:
+#             continue
+#         pod, host_ip = parts
+#         if prefix in pod and "step-" in pod:
+#             step_name = "-".join(pod.split("-")[3:5])  # es. "0-xxxxxx"
+#             mapping[step_name] = host_ip
+#     return mapping
 
-def node_ip_for_step(step_idx: int):
-    # la tua mappa ha chiavi tipo "0-<podhash>"
-    for k, v in STEP_NODE_MAP.items():
-        if k.startswith(f"{step_idx}-"):
-            return v
-    return None
+# STEP_NODE_MAP = get_step_node_map()
+# print("Step → Node:", STEP_NODE_MAP)
+
+# def node_ip_for_step(step_idx: int):
+#     # la tua mappa ha chiavi tipo "0-<podhash>"
+#     for k, v in STEP_NODE_MAP.items():
+#         if k.startswith(f"{step_idx}-"):
+#             return v
+#     return None
 
 # ==========================
 # REQUEST LISTENER -> raw_timings.csv
@@ -262,8 +283,8 @@ def log_request(request_type, name, response_time, response_length, exception, *
     # Per questa run, logghiamo solo:
     # - la POST verso step-0 (end-to-end)
     # - eventuali errori
-    step0_ip = node_ip_for_step(0)
-    node_ip = step0_ip
+    # step0_ip = node_ip_for_step(0)
+    # node_ip = step0_ip
 
     gpu_val = gpu_dict.get(node_ip, 0) if node_ip else 0
     http_val = http_dict.get("step-0", 0)
