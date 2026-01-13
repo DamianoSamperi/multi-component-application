@@ -153,6 +153,18 @@ def build_node_name_map():
             mapping[parts[ip_idx]] = parts[name_idx]
     return mapping
 NODE_NAME_MAP = build_node_name_map()
+def get_node_ips():
+    out = subprocess.run(
+        [
+            "kubectl", "get", "nodes",
+            "-o",
+            "jsonpath={range .items[*]}{.status.addresses[?(@.type=='InternalIP')].address}{'\\n'}{end}"
+        ],
+        stdout=subprocess.PIPE,
+        text=True,
+        check=True
+    )
+    return [ip.strip() for ip in out.stdout.splitlines() if ip.strip()]
 
 def query_http_in_progress_per_step():
     try:
@@ -222,18 +234,6 @@ print("🧪 TEST_ID:", TEST_ID)
 # ==========================
 # STEP -> NODE MAP
 # ==========================
-def get_node_ips():
-    out = subprocess.run(
-        [
-            "kubectl", "get", "nodes",
-            "-o",
-            "jsonpath={range .items[*]}{.status.addresses[?(@.type=='InternalIP')].address}{'\\n'}{end}"
-        ],
-        stdout=subprocess.PIPE,
-        text=True,
-        check=True
-    )
-    return [ip.strip() for ip in out.stdout.splitlines() if ip.strip()]
 
 # def get_step_node_map(prefix="pipeline-"):
 #     out = subprocess.run(
