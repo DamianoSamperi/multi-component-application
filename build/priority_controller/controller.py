@@ -15,6 +15,8 @@ HIGH_PRIORITY_CLASS = os.getenv("HIGH_PRIORITY_CLASS", "high-qos")
 PRIORITY_THRESHOLDS = []
 PRIORITY_THRESHOLDS_LAST_RELOAD = 0
 PRIORITY_THRESHOLDS_RELOAD_INTERVAL = 300  # 5 minuti
+PRIORITY_COOLDOWN = 60  # secondi 
+LAST_PRIORITY_CHANGE = {}
 # ===== SETUP =====
 try:
     config.load_incluster_config()
@@ -74,6 +76,11 @@ def notify_pod_drain(pod_ip):
             print(f"[WARN] Pod {pod_ip} ha risposto {resp.status_code}")
     except Exception as e:
         print(f"[WARN] Errore durante notifica drain a {pod_ip}: {e}")
+def in_cooldown(pipeline_id, step_id):
+    ts = LAST_PRIORITY_CHANGE.get((pipeline_id, step_id))
+    if not ts:
+        return False
+    return (time.time() - ts) < PRIORITY_COOLDOWN
 
 def wait_for_pod_not_ready(pod_name):
     """Attende che il pod diventi NotReady."""
@@ -205,11 +212,23 @@ def get_pods_for_step(pipeline_id, step_id):
     return pods.items
 
 def update_configmap_priority(cm_name, new_priority, step_id):
-    """Aggiorna la priority in uno specifico step di una ConfigMap."""
     cm = v1.read_namespaced_config_map(name=cm_name, namespace=NAMESPACE)
     data = yaml.safe_load(cm.data["PIPELINE_CONFIG"])
 
+    pipeline_id = cm.metadata.labels["pipeline_id"]
+    key = (pipeline_id, step_id)
+
+    #  COOLDOWN CHECK – SUBITO
+    if in_cooldown(*key):
+        print(
+            f"[COOLDOWN] Skip priority change for {key}, still in cooldown",
+            flush=True
+        )
+        return
+
     updated = False
+
+    #  DECISIONE
     for step in data.get("steps", []):
         if step["id"] == step_id:
             if step["priority"] == new_priority:
@@ -217,24 +236,41 @@ def update_configmap_priority(cm_name, new_priority, step_id):
             step["priority"] = new_priority
             updated = True
 
-    if updated:
-        cm.data["PIPELINE_CONFIG"] = yaml.dump(data)
-        v1.replace_namespaced_config_map(name=cm_name, namespace=NAMESPACE, body=cm)
-        print(f"[UPDATE] ConfigMap {cm_name} aggiornata con priority={new_priority} per step {step_id}", flush=True)
-        # Dopo aver aggiornato la ConfigMap, notifichiamo i pod attivi
-        pods = get_pods_for_step(pipeline_id=cm.metadata.labels["pipeline_id"], step_id=step_id)
-        for pod in pods:
-            if pod_already_on_suitable_node(pod, new_priority):
-                print(
-                    f"[SKIP] Pod {pod.metadata.name} già su nodo adeguato "
-                    f"(priority={new_priority})",
-                    flush=True
-                )
-                return
-            if pod.status.pod_ip:
-                notify_pod_drain(pod.status.pod_ip)
-                wait_for_pod_not_ready(pod.metadata.name)
-        restart_deployment_for_step(pipeline_id=cm.metadata.labels["pipeline_id"], step_id=step_id)
+    if not updated:
+        return
+
+    # COMMIT CONFIGMAP
+    cm.data["PIPELINE_CONFIG"] = yaml.dump(data)
+    v1.replace_namespaced_config_map(
+        name=cm_name,
+        namespace=NAMESPACE,
+        body=cm
+    )
+
+    LAST_PRIORITY_CHANGE[key] = time.time()
+
+    print(
+        f"[UPDATE] ConfigMap {cm_name} aggiornata con priority={new_priority} per step {step_id}",
+        flush=True
+    )
+
+    # DRAIN + ROLLOUT
+    pods = get_pods_for_step(pipeline_id=pipeline_id, step_id=step_id)
+    for pod in pods:
+        if pod_already_on_suitable_node(pod, new_priority):
+            print(
+                f"[SKIP] Pod {pod.metadata.name} già su nodo adeguato "
+                f"(priority={new_priority})",
+                flush=True
+            )
+            return
+
+        if pod.status.pod_ip:
+            notify_pod_drain(pod.status.pod_ip)
+            wait_for_pod_not_ready(pod.metadata.name)
+
+    restart_deployment_for_step(pipeline_id=pipeline_id, step_id=step_id)
+
 
 def choose_priority(in_flight: float) -> str:
     refresh_priority_thresholds_if_needed()
