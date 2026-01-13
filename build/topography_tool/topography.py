@@ -180,6 +180,13 @@ def generate_deployments(steps: List[Dict], pipeline_prefix: str, namespace="def
         
         deployment_spec = {
             "replicas": 1,
+            "strategy": {
+                "type": "RollingUpdate",
+                "rollingUpdate": {
+                    "maxSurge": 1,
+                    "maxUnavailable": 0
+                }
+            },
             "selector": {"matchLabels": {"app": "nn-service", "step": str(step_id), "pipeline_id": pipeline_prefix}},
             "template": {
                 "metadata": {"labels": {"app": "nn-service", "step": str(step_id), "pipeline_id": pipeline_prefix},
