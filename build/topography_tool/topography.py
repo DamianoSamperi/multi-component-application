@@ -237,6 +237,7 @@ def generate_services(steps: List[Dict], pipeline_prefix: str, namespace="defaul
         
         if step["id"] == 0:
             spec["type"] = "NodePort"
+            spec["externalTrafficPolicy"] = "Cluster" 
             spec["ports"] = [{"name": "http", "port": 5000, "targetPort": 5000,"nodePort": 32400}]
         # service = {
         #     "apiVersion": "v1",
