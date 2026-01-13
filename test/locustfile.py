@@ -10,7 +10,7 @@ import requests
 import random
 import os
 from locust import HttpUser, task, events, LoadTestShape
-
+from urllib.parse import urlparse
 
 
 # ==========================
@@ -275,21 +275,30 @@ def pick_load_profile():
     if LOAD_PROFILE == "medium":
         return "heavy" if random.random() < 0.7 else "light"
     return LOAD_PROFILE
-  
+
+def node_ip_from_base_url():
+    try:
+        if not ENTRYPOINTS:
+            return None
+        _, base_url = ENTRYPOINTS[0]
+        return urlparse(base_url).hostname
+    except Exception:
+        return None
 @events.request.add_listener
 def log_request(request_type, name, response_time, response_length, exception, **kwargs):
     gpu_dict, http_dict = get_metrics_cached()
 
-    # Per questa run, logghiamo solo:
-    # - la POST verso step-0 (end-to-end)
-    # - eventuali errori
-    # step0_ip = node_ip_for_step(0)
-    # node_ip = step0_ip
+    # nodo a cui Locust ha mandato la request (NON dove gira il pod)
+    node_ip = node_ip_from_base_url()
 
     gpu_val = gpu_dict.get(node_ip, 0) if node_ip else 0
     http_val = http_dict.get("step-0", 0)
 
-    status_code = kwargs.get("response").status_code if kwargs.get("response") is not None else ""
+    status_code = (
+        kwargs.get("response").status_code
+        if kwargs.get("response") is not None
+        else ""
+    )
 
     raw_writer.writerow([
         time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -301,10 +310,40 @@ def log_request(request_type, name, response_time, response_length, exception, *
         status_code,
         f"{gpu_val:.2f}",
         f"{http_val:.2f}",
-        node_ip or "unknown",
+        node_ip or "cluster",
         LOAD_PROFILE,
     ])
     raw_file.flush()
+
+# @events.request.add_listener
+# def log_request(request_type, name, response_time, response_length, exception, **kwargs):
+#     gpu_dict, http_dict = get_metrics_cached()
+
+#     # Per questa run, logghiamo solo:
+#     # - la POST verso step-0 (end-to-end)
+#     # - eventuali errori
+#     # step0_ip = node_ip_for_step(0)
+#     # node_ip = step0_ip
+
+#     gpu_val = gpu_dict.get(node_ip, 0) if node_ip else 0
+#     http_val = http_dict.get("step-0", 0)
+
+#     status_code = kwargs.get("response").status_code if kwargs.get("response") is not None else ""
+
+#     raw_writer.writerow([
+#         time.strftime("%Y-%m-%d %H:%M:%S"),
+#         TEST_ID,
+#         request_type,
+#         name,
+#         f"{response_time:.2f}",
+#         "OK" if exception is None else "FAIL",
+#         status_code,
+#         f"{gpu_val:.2f}",
+#         f"{http_val:.2f}",
+#         node_ip or "unknown",
+#         LOAD_PROFILE,
+#     ])
+#     raw_file.flush()
 
 # ==========================
 # USER
