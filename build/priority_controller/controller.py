@@ -43,6 +43,8 @@ def load_priority_thresholds():
     thresholds = []
 
     for pc in pcs:
+        if pc.metadata.name.startswith("system-"):
+            continue
         ann = pc.metadata.annotations or {}
         try:
             min_v = int(ann.get("qos.threshold.min_inflight", "0"))
@@ -256,18 +258,32 @@ def update_configmap_priority(cm_name, new_priority, step_id):
 
     # DRAIN + ROLLOUT
     pods = get_pods_for_step(pipeline_id=pipeline_id, step_id=step_id)
+    pod_to_drain = None
     for pod in pods:
-        if pod_already_on_suitable_node(pod, new_priority):
-            print(
-                f"[SKIP] Pod {pod.metadata.name} già su nodo adeguato "
-                f"(priority={new_priority})",
-                flush=True
-            )
-            return
+        if pod.status.phase != "Running":
+            continue
+        for cond in pod.status.conditions or []:
+            if cond.type == "Ready" and cond.status == "True":
+                pod_to_drain = pod
+                break
 
-        if pod.status.pod_ip:
-            notify_pod_drain(pod.status.pod_ip)
-            wait_for_pod_not_ready(pod.metadata.name)
+        if pod_to_drain:
+            break
+
+        if not pod_to_drain:
+            print("[INFO] Nessun pod READY da drainare", flush=True)
+        else
+            if pod_already_on_suitable_node(pod_to_drain, new_priority):
+                print(
+                    f"[SKIP] Pod {pod_to_drain.metadata.name} già su nodo adeguato "
+                    f"(priority={new_priority})",
+                    flush=True
+                )
+                return
+        
+            if pod_to_drain.status.pod_ip:
+                notify_pod_drain(pod_to_drain.status.pod_ip)
+                wait_for_pod_not_ready(pod_to_drain.metadata.name)
 
     restart_deployment_for_step(pipeline_id=pipeline_id, step_id=step_id)
 
@@ -286,8 +302,10 @@ def evaluate_priority():
     """Analizza le metriche Prometheus e aggiorna priorità solo per gli step interessati."""
     #query = 'sum(rate(http_requests_total{namespace="default"}[1m])) by (pipeline_id, step_id)'
     query = '''
-    sum(http_requests_in_progress)
-    by (pipeline_id, step_id)
+    max_over_time(
+      sum(http_requests_in_progress)
+      by (pipeline_id, step_id)
+    [2m])
     '''
 
     results = query_prometheus(query)
