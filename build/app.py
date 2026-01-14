@@ -124,9 +124,9 @@ def before_request():
     # conta SOLO /process
     g.count_inflight = (request.path == "/process")
     if g.count_inflight:
-    http_request_in_progress.labels(
-        PIPELINE_ID, STEP_ID, POD_NAME
-    ).inc()
+        http_request_in_progress.labels(
+            PIPELINE_ID, STEP_ID, POD_NAME
+        ).inc()
 
     # 🔴 SOLO ORA controlli il drain
     if not accepting_requests:
