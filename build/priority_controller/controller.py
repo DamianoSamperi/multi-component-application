@@ -334,6 +334,8 @@ def evaluate_priority():
         pipeline_id = metric["metric"]["pipeline_id"]
         step_id = int(metric["metric"]["step_id"])
         in_flight = float(metric["value"][1])
+        if in_flight > 0:
+            LAST_NONZERO_INFLIGHT[(pipeline_id, step_id)] = time.time()
         new_priority = choose_priority(in_flight)
         print(
             f"[DECISION] pipeline={pipeline_id} step={step_id} "
@@ -349,8 +351,7 @@ def evaluate_priority():
         #     f"in_flight={in_flight:.1f} → priority={new_priority}",
         #     flush=True
         # )
-        if in_flight > 0:
-            LAST_NONZERO_INFLIGHT[(pipeline_id, step_id)] = time.time()
+
         if new_priority == LOW_PRIORITY_CLASS:
             last_active = LAST_NONZERO_INFLIGHT.get((pipeline_id, step_id))
             if last_active and (time.time() - last_active) < PRIORITY_DOWNSCALE_GRACE:
