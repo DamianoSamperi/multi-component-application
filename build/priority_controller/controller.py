@@ -359,7 +359,7 @@ def evaluate_priority():
                     f"(recent activity)",
                     flush=True
                 )
-                return
+                continue
         cm_name = f"{pipeline_id}-step-{step_id}"
         update_configmap_priority(cm_name, new_priority, step_id)
 
