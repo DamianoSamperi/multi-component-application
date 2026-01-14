@@ -10,7 +10,10 @@ from PIL import Image
 from kubernetes import client, config as k8s_config
 from prometheus_client import Counter, Gauge, generate_latest, CONTENT_TYPE_LATEST, Histogram
 import traceback
+import signal
+import sys
 
+MAX_SHUTDOWN_WAIT = 4500  # secondi (scelgo in base al worst-case)
 USE_LIGHT = os.getenv("USE_LIGHT", "false").lower() == "true"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
@@ -18,6 +21,38 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 app = Flask(__name__)
 DEFAULT_LOAD_PROFILE = os.getenv("DEFAULT_LOAD_PROFILE", "light")
 accepting_requests = True
+shutdown_event = threading.Event()
+
+def handle_sigterm(signum, frame):
+    global accepting_requests
+    print("[SIGTERM] Received, starting graceful shutdown")
+
+    accepting_requests = False
+    shutdown_event.set()
+
+    start = time.time()
+
+    while True:
+        inflight = http_request_in_progress.labels(
+            PIPELINE_ID, STEP_ID, POD_NAME
+        )._value.get()
+
+        if inflight <= 0:
+            print("[SIGTERM] All requests completed, exiting")
+            break
+
+        if time.time() - start > MAX_SHUTDOWN_WAIT:
+            print("[SIGTERM] Timeout reached, forcing exit")
+            break
+
+        print(f"[SIGTERM] Waiting inflight={inflight}")
+        time.sleep(1)
+
+    sys.exit(0)
+
+
+signal.signal(signal.SIGTERM, handle_sigterm)
+signal.signal(signal.SIGINT, handle_sigterm)
 
 @app.route("/readyz")
 def readyz():
@@ -32,33 +67,44 @@ def readyz():
         return "loading", 503
     else:
         return "draining", 503
+# @app.route("/drain", methods=["POST"])
+# def drain():
+#     global accepting_requests
+#     accepting_requests = False
+#     print("[INFO] Ricevuto comando di draining")
+#     return jsonify({"status": "draining"}), 200
+
+# http_requests_total = Counter(
+#     'http_requests_total',
+#     'Numero totale di richieste HTTP ricevute per step',
+#     ['method', 'endpoint', 'pipeline_id', 'step_id', 'pod_name']
+# )
+
+# http_request_in_progress = Gauge(
+#     'http_requests_in_progress',
+#     'Numero di richieste attualmente in elaborazione per step',
+#     ['pipeline_id', 'step_id', 'pod_name']
+# )
+# POD_NAME = os.getenv("POD_NAME", socket.gethostname())
+
+# step_latency = Histogram(
+#     "step_processing_time_seconds",
+#     "Tempo di elaborazione per step",
+#     ["pipeline_id", "step_id", "pod_name", "test_id"],
+#     buckets=(0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60, 120, 300, 600, 1200)
+# )
 @app.route("/drain", methods=["POST"])
 def drain():
     global accepting_requests
     accepting_requests = False
-    print("[INFO] Ricevuto comando di draining")
-    return jsonify({"status": "draining"}), 200
 
-http_requests_total = Counter(
-    'http_requests_total',
-    'Numero totale di richieste HTTP ricevute per step',
-    ['method', 'endpoint', 'pipeline_id', 'step_id', 'pod_name']
-)
+    inflight = http_request_in_progress.labels(
+        PIPELINE_ID, STEP_ID, POD_NAME
+    )._value.get()
 
-http_request_in_progress = Gauge(
-    'http_requests_in_progress',
-    'Numero di richieste attualmente in elaborazione per step',
-    ['pipeline_id', 'step_id', 'pod_name']
-)
-POD_NAME = os.getenv("POD_NAME", socket.gethostname())
-
-step_latency = Histogram(
-    "step_processing_time_seconds",
-    "Tempo di elaborazione per step",
-    ["pipeline_id", "step_id", "pod_name", "test_id"],
-    buckets=(0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60, 120, 300, 600, 1200)
-)
-
+    print(f"[DRAIN] draining enabled, inflight={inflight}")
+    return jsonify({"status": "draining", "inflight": inflight}), 200
+    
 @app.before_request
 def before_request():
     g.start_time = time.time()
@@ -69,19 +115,32 @@ def before_request():
         "X-Load-Profile",
         DEFAULT_LOAD_PROFILE
     )
+    # conta SOLO /process
+    g.count_inflight = (request.path == "/process")
+    # se stai drainando, rifiuta nuove /process subito
+    if g.count_inflight and not accepting_requests:
+        return jsonify({"error": "draining"}), 503
 
-    http_request_in_progress.labels(PIPELINE_ID, STEP_ID, POD_NAME).inc()
-    http_requests_total.labels(
-        request.method,
-        request.path,
-        PIPELINE_ID,
-        STEP_ID,
-        POD_NAME
-    ).inc()
+    if g.count_inflight:
+        http_request_in_progress.labels(PIPELINE_ID, STEP_ID, POD_NAME).inc()
+        http_requests_total.labels(
+            request.method, request.path, PIPELINE_ID, STEP_ID, POD_NAME
+        ).inc()
+
+    # http_request_in_progress.labels(PIPELINE_ID, STEP_ID, POD_NAME).inc()
+    # http_requests_total.labels(
+    #     request.method,
+    #     request.path,
+    #     PIPELINE_ID,
+    #     STEP_ID,
+    #     POD_NAME
+    # ).inc()
 @app.after_request
 def after_request(response):
     elapsed = time.time() - g.start_time
-    http_request_in_progress.labels(PIPELINE_ID, STEP_ID, POD_NAME).dec()
+    # http_request_in_progress.labels(PIPELINE_ID, STEP_ID, POD_NAME).dec()
+    if getattr(g, "count_inflight", False):
+        http_request_in_progress.labels(PIPELINE_ID, STEP_ID, POD_NAME).dec()
     response.headers["X-Elapsed-Time"] = str(elapsed)
     return response
 
