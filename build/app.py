@@ -123,15 +123,19 @@ def before_request():
     )
     # conta SOLO /process
     g.count_inflight = (request.path == "/process")
-    # se stai drainando, rifiuta nuove /process subito
-    if g.count_inflight and not accepting_requests:
+    if g.count_inflight:
+    http_request_in_progress.labels(
+        PIPELINE_ID, STEP_ID, POD_NAME
+    ).inc()
+
+    # 🔴 SOLO ORA controlli il drain
+    if not accepting_requests:
+        # rollback dell'incremento
+        http_request_in_progress.labels(
+            PIPELINE_ID, STEP_ID, POD_NAME
+        ).dec()
         return jsonify({"error": "draining"}), 503
 
-    if g.count_inflight:
-        http_request_in_progress.labels(PIPELINE_ID, STEP_ID, POD_NAME).inc()
-        http_requests_total.labels(
-            request.method, request.path, PIPELINE_ID, STEP_ID, POD_NAME
-        ).inc()
 
     # http_request_in_progress.labels(PIPELINE_ID, STEP_ID, POD_NAME).inc()
     # http_requests_total.labels(
