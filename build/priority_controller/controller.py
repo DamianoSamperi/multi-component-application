@@ -314,10 +314,12 @@ def evaluate_priority():
     """Analizza le metriche Prometheus e aggiorna priorità solo per gli step interessati."""
     #query = 'sum(rate(http_requests_total{namespace="default"}[1m])) by (pipeline_id, step_id)'
     query = '''
-    max_over_time(
-      sum(http_requests_in_progress)
-      by (pipeline_id, step_id)
-    [2m])
+    sum(
+      max_over_time(
+        http_requests_in_progress[30s]
+      )
+    )
+    by (pipeline_id, step_id)
     '''
 
     results = query_prometheus(query)
