@@ -305,14 +305,16 @@ def evaluate_priority():
         new_priority = choose_priority(in_flight)
 
         # Cerca la ConfigMap corrispondente a questa pipeline
-        cms = v1.list_namespaced_config_map(namespace=NAMESPACE, label_selector=f"pipeline_id={pipeline_id}").items
-        for cm in cms:
-            update_configmap_priority(cm.metadata.name, new_priority, step_id)
-        print(
-            f"[INFO] Pipeline={pipeline_id} Step={step_id} "
-            f"in_flight={in_flight:.1f} → priority={new_priority}",
-            flush=True
-        )
+        # cms = v1.list_namespaced_config_map(namespace=NAMESPACE, label_selector=f"pipeline_id={pipeline_id}").items
+        # for cm in cms:
+        #     update_configmap_priority(cm.metadata.name, new_priority, step_id)
+        # print(
+        #     f"[INFO] Pipeline={pipeline_id} Step={step_id} "
+        #     f"in_flight={in_flight:.1f} → priority={new_priority}",
+        #     flush=True
+        # )
+        cm_name = f"{pipeline_id}-step-{step_id}"
+        update_configmap_priority(cm_name, new_priority, step_id)
 
 
 def main():
