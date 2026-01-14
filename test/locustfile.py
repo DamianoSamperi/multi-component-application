@@ -235,25 +235,25 @@ print("🧪 TEST_ID:", TEST_ID)
 # STEP -> NODE MAP
 # ==========================
 
-# def get_step_node_map(prefix="pipeline-"):
-#     out = subprocess.run(
-#         ["kubectl", "get", "pods", "-n", "default", "--no-headers",
-#          "-o", "custom-columns=:metadata.name,:status.hostIP"],
-#         stdout=subprocess.PIPE, text=True, check=True
-#     )
-#     mapping = {}
-#     for line in out.stdout.splitlines():
-#         parts = line.split()
-#         if len(parts) != 2:
-#             continue
-#         pod, host_ip = parts
-#         if prefix in pod and "step-" in pod:
-#             step_name = "-".join(pod.split("-")[3:5])  # es. "0-xxxxxx"
-#             mapping[step_name] = host_ip
-#     return mapping
+def get_step_node_map(prefix="pipeline-"):
+    out = subprocess.run(
+        ["kubectl", "get", "pods", "-n", "default", "--no-headers",
+         "-o", "custom-columns=:metadata.name,:status.hostIP"],
+        stdout=subprocess.PIPE, text=True, check=True
+    )
+    mapping = {}
+    for line in out.stdout.splitlines():
+        parts = line.split()
+        if len(parts) != 2:
+            continue
+        pod, host_ip = parts
+        if prefix in pod and "step-" in pod:
+            step_name = "-".join(pod.split("-")[3:5])  # es. "0-xxxxxx"
+            mapping[step_name] = host_ip
+    return mapping
 
-# STEP_NODE_MAP = get_step_node_map()
-# print("Step → Node:", STEP_NODE_MAP)
+STEP_NODE_MAP = get_step_node_map()
+print("Step → Node:", STEP_NODE_MAP)
 
 # def node_ip_for_step(step_idx: int):
 #     # la tua mappa ha chiavi tipo "0-<podhash>"
