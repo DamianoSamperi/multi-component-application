@@ -47,6 +47,8 @@ def load_priority_thresholds():
             continue
         ann = pc.metadata.annotations or {}
         try:
+            if "qos.threshold.min_inflight" not in ann or "qos.threshold.max_inflight" not in ann:
+                continue
             min_v = int(ann.get("qos.threshold.min_inflight", "0"))
             max_v = int(ann.get("qos.threshold.max_inflight", "0"))
             thresholds.append({
@@ -83,15 +85,25 @@ def in_cooldown(pipeline_id, step_id):
     if not ts:
         return False
     return (time.time() - ts) < PRIORITY_COOLDOWN
-
-def wait_for_pod_not_ready(pod_name):
-    """Attende che il pod diventi NotReady."""
+    
+def wait_for_pod_not_ready(pod_name, timeout_s=180):
+    start = time.time()
     while True:
-        pod = v1.read_namespaced_pod(pod_name, namespace=NAMESPACE)
+        try:
+            pod = v1.read_namespaced_pod(pod_name, namespace=NAMESPACE)
+        except Exception:
+            return  # pod sparito
+
         for cond in pod.status.conditions or []:
             if cond.type == "Ready" and cond.status == "False":
                 return
+
+        if time.time() - start > timeout_s:
+            print(f"[WARN] Timeout waiting NotReady for {pod_name}", flush=True)
+            return
+
         time.sleep(1)
+
 # ===== GPU FACTORS (QoSAware) =====
 
 FALLBACK_GPU_FACTOR = {
@@ -270,20 +282,20 @@ def update_configmap_priority(cm_name, new_priority, step_id):
         if pod_to_drain:
             break
 
-        if not pod_to_drain:
-            print("[INFO] Nessun pod READY da drainare", flush=True)
-        else
-            if pod_already_on_suitable_node(pod_to_drain, new_priority):
-                print(
-                    f"[SKIP] Pod {pod_to_drain.metadata.name} già su nodo adeguato "
-                    f"(priority={new_priority})",
-                    flush=True
-                )
-                return
-        
-            if pod_to_drain.status.pod_ip:
-                notify_pod_drain(pod_to_drain.status.pod_ip)
-                wait_for_pod_not_ready(pod_to_drain.metadata.name)
+    if not pod_to_drain:
+        print("[INFO] Nessun pod READY da drainare", flush=True)
+    else:
+        if pod_already_on_suitable_node(pod_to_drain, new_priority):
+            print(
+                f"[SKIP] Pod {pod_to_drain.metadata.name} già su nodo adeguato "
+                f"(priority={new_priority})",
+                flush=True
+            )
+            return
+    
+        if pod_to_drain.status.pod_ip:
+            notify_pod_drain(pod_to_drain.status.pod_ip)
+            wait_for_pod_not_ready(pod_to_drain.metadata.name)
 
     restart_deployment_for_step(pipeline_id=pipeline_id, step_id=step_id)
 
