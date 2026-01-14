@@ -16,6 +16,8 @@ PRIORITY_THRESHOLDS = []
 PRIORITY_THRESHOLDS_LAST_RELOAD = 0
 PRIORITY_THRESHOLDS_RELOAD_INTERVAL = 300  # 5 minuti
 PRIORITY_COOLDOWN = 60  # secondi 
+PRIORITY_DOWNSCALE_GRACE = 600  # 10 minuti
+LAST_NONZERO_INFLIGHT = {}
 LAST_PRIORITY_CHANGE = {}
 # ===== SETUP =====
 try:
@@ -332,10 +334,12 @@ def evaluate_priority():
         pipeline_id = metric["metric"]["pipeline_id"]
         step_id = int(metric["metric"]["step_id"])
         in_flight = float(metric["value"][1])
-
-
         new_priority = choose_priority(in_flight)
-
+        print(
+            f"[DECISION] pipeline={pipeline_id} step={step_id} "
+            f"in_flight={in_flight:.2f} → target_priority={new_priority}",
+            flush=True
+        )
         # Cerca la ConfigMap corrispondente a questa pipeline
         # cms = v1.list_namespaced_config_map(namespace=NAMESPACE, label_selector=f"pipeline_id={pipeline_id}").items
         # for cm in cms:
@@ -345,6 +349,17 @@ def evaluate_priority():
         #     f"in_flight={in_flight:.1f} → priority={new_priority}",
         #     flush=True
         # )
+        if in_flight > 0:
+            LAST_NONZERO_INFLIGHT[(pipeline_id, step_id)] = time.time()
+        if new_priority == LOW_PRIORITY_CLASS:
+            last_active = LAST_NONZERO_INFLIGHT.get((pipeline_id, step_id))
+            if last_active and (time.time() - last_active) < PRIORITY_DOWNSCALE_GRACE:
+                print(
+                    f"[STICKY] Skip downscale for {(pipeline_id, step_id)} "
+                    f"(recent activity)",
+                    flush=True
+                )
+                return
         cm_name = f"{pipeline_id}-step-{step_id}"
         update_configmap_priority(cm_name, new_priority, step_id)
 
