@@ -196,6 +196,7 @@ def generate_deployments(steps: List[Dict], pipeline_prefix: str, namespace="def
                                 "prometheus.io/path": "/metrics",
                             }},
                 "spec": {
+                    "terminationGracePeriodSeconds": 4500,
                     "schedulerName": "scheduler-plugins-scheduler",
                     "containers": [container],
                     "volumes": volumes if volumes else [],
