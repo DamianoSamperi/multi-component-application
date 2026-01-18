@@ -353,14 +353,14 @@ class PipelineUser(HttpUser):
     wait_time = lambda self: 0
     host = "http://dummy"
   
-  def on_start(self):
-      self.client = HttpSession(
-          base_url=self.host,
-          request_event=self.environment.events.request,
-          user=self,
-          pool_manager_kwargs={"retries": False}
-      )
-      self.client.headers.update({"Connection": "close"})
+    def on_start(self):
+        self.client = HttpSession(
+            base_url=self.host,
+            request_event=self.environment.events.request,
+            user=self,
+            pool_manager_kwargs={"retries": False}
+        )
+        self.client.headers.update({"Connection": "close"})
       
     @task
     def send_to_all(self):
