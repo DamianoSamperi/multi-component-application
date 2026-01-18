@@ -315,15 +315,19 @@ def choose_priority(in_flight: float) -> str:
 def evaluate_priority():
     """Analizza le metriche Prometheus e aggiorna priorità solo per gli step interessati."""
     #query = 'sum(rate(http_requests_total{namespace="default"}[1m])) by (pipeline_id, step_id)'
+    # query = '''
+    # sum(
+    #   max_over_time(
+    #     http_requests_in_progress[30s]
+    #   )
+    # )
+    # by (pipeline_id, step_id)
+    # '''
     query = '''
-    sum(
-      max_over_time(
-        http_requests_in_progress[30s]
-      )
+    sum by (pipeline_id, step_id)(
+      http_requests_in_progress{job=~"pipeline-.*"}
     )
-    by (pipeline_id, step_id)
     '''
-
     results = query_prometheus(query)
 
     if not results:
