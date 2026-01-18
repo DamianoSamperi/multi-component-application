@@ -10,6 +10,7 @@ import requests
 import random
 import os
 from locust import HttpUser, task, events, LoadTestShape
+from locust.clients import HttpSession
 from urllib.parse import urlparse
 
 
@@ -351,7 +352,16 @@ def log_request(request_type, name, response_time, response_length, exception, *
 class PipelineUser(HttpUser):
     wait_time = lambda self: 0
     host = "http://dummy"
-
+  
+  def on_start(self):
+      self.client = HttpSession(
+          base_url=self.host,
+          request_event=self.environment.events.request,
+          user=self,
+          pool_manager_kwargs={"retries": False}
+      )
+      self.client.headers.update({"Connection": "close"})
+      
     @task
     def send_to_all(self):
         if not ENTRYPOINTS:
