@@ -104,37 +104,37 @@ def drain():
     global accepting_requests
     accepting_requests = False
 
-    inflight = http_request_in_progress.labels(
-        PIPELINE_ID, STEP_ID, POD_NAME
-    )._value.get()
+    inflight = 0
+    try:
+        inflight = http_request_in_progress.labels(
+            PIPELINE_ID, STEP_ID, POD_NAME
+        )._value.get()
+    except Exception:
+        pass
 
     print(f"[DRAIN] draining enabled, inflight={inflight}")
     return jsonify({"status": "draining", "inflight": inflight}), 200
+
     
 @app.before_request
 def before_request():
     g.start_time = time.time()
     g.test_id = request.headers.get("X-Test-ID", "unknown")
+    g.load_profile = request.headers.get("X-Load-Profile", DEFAULT_LOAD_PROFILE)
 
-    # 🔹 NUOVO: profilo di carico
-    g.load_profile = request.headers.get(
-        "X-Load-Profile",
-        DEFAULT_LOAD_PROFILE
-    )
     # conta SOLO /process
     g.count_inflight = (request.path == "/process")
-    if g.count_inflight:
-        http_request_in_progress.labels(
-            PIPELINE_ID, STEP_ID, POD_NAME
-        ).inc()
 
-    # 🔴 SOLO ORA controlli il drain
-    if not accepting_requests:
-        # rollback dell'incremento
-        http_request_in_progress.labels(
-            PIPELINE_ID, STEP_ID, POD_NAME
-        ).dec()
+    # se draining, rifiuta SOLO nuove /process
+    if g.count_inflight and not accepting_requests:
         return jsonify({"error": "draining"}), 503
+
+    # incrementa solo se è /process accettata
+    if g.count_inflight:
+        http_request_in_progress.labels(PIPELINE_ID, STEP_ID, POD_NAME).inc()
+        http_requests_total.labels(
+            request.method, request.path, PIPELINE_ID, STEP_ID, POD_NAME
+        ).inc()
 
 
     # http_request_in_progress.labels(PIPELINE_ID, STEP_ID, POD_NAME).inc()
@@ -145,6 +145,7 @@ def before_request():
     #     STEP_ID,
     #     POD_NAME
     # ).inc()
+
 @app.after_request
 def after_request(response):
     elapsed = time.time() - g.start_time
