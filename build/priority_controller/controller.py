@@ -264,6 +264,19 @@ def update_configmap_priority(cm_name, new_priority, step_id):
         namespace=NAMESPACE,
         body=cm
     )
+    apps_v1.patch_namespaced_deployment(
+    name=f"{pipeline_id}-step-{step_id}",
+    namespace=NAMESPACE,
+    body={
+            "spec": {
+                "template": {
+                    "spec": {
+                        "priorityClassName": new_priority
+                    }
+                }
+            }
+        }
+    )
 
     LAST_PRIORITY_CHANGE[key] = time.time()
 
@@ -301,7 +314,7 @@ def update_configmap_priority(cm_name, new_priority, step_id):
             notify_pod_drain(pod_to_drain.status.pod_ip)
             wait_for_pod_not_ready(pod_to_drain.metadata.name)
 
-    restart_deployment_for_step(pipeline_id=pipeline_id, step_id=step_id)
+    # restart_deployment_for_step(pipeline_id=pipeline_id, step_id=step_id)
 
 
 def choose_priority(in_flight: float) -> str:
