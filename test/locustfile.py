@@ -275,45 +275,46 @@ def pick_load_profile():
     if LOAD_PROFILE == "medium":
         return "heavy" if random.random() < 0.7 else "light"
     return LOAD_PROFILE
-
 def node_ip_from_base_url():
-    try:
-        if not ENTRYPOINTS:
-            return None
-        _, base_url = ENTRYPOINTS[0]
-        return urlparse(base_url).hostname
-    except Exception:
-        return None
-@events.request.add_listener
-def log_request(request_type, name, response_time, response_length, exception, **kwargs):
-    gpu_dict, http_dict = get_metrics_cached()
+    return "ingress"
+# def node_ip_from_base_url():
+#     try:
+#         if not ENTRYPOINTS:
+#             return None
+#         _, base_url = ENTRYPOINTS[0]
+#         return urlparse(base_url).hostname
+#     except Exception:
+#         return None
+# @events.request.add_listener
+# def log_request(request_type, name, response_time, response_length, exception, **kwargs):
+#     gpu_dict, http_dict = get_metrics_cached()
 
-    # nodo a cui Locust ha mandato la request (NON dove gira il pod)
-    node_ip = node_ip_from_base_url()
+#     # nodo a cui Locust ha mandato la request (NON dove gira il pod)
+#     node_ip = node_ip_from_base_url()
 
-    gpu_val = gpu_dict.get(node_ip, 0) if node_ip else 0
-    http_val = http_dict.get("step-0", 0)
+#     gpu_val = gpu_dict.get(node_ip, 0) if node_ip else 0
+#     http_val = http_dict.get("step-0", 0)
 
-    status_code = (
-        kwargs.get("response").status_code
-        if kwargs.get("response") is not None
-        else ""
-    )
+#     status_code = (
+#         kwargs.get("response").status_code
+#         if kwargs.get("response") is not None
+#         else ""
+#     )
 
-    raw_writer.writerow([
-        time.strftime("%Y-%m-%d %H:%M:%S"),
-        TEST_ID,
-        request_type,
-        name,
-        f"{response_time:.2f}",
-        "OK" if exception is None else "FAIL",
-        status_code,
-        f"{gpu_val:.2f}",
-        f"{http_val:.2f}",
-        node_ip or "cluster",
-        LOAD_PROFILE,
-    ])
-    raw_file.flush()
+#     raw_writer.writerow([
+#         time.strftime("%Y-%m-%d %H:%M:%S"),
+#         TEST_ID,
+#         request_type,
+#         name,
+#         f"{response_time:.2f}",
+#         "OK" if exception is None else "FAIL",
+#         status_code,
+#         f"{gpu_val:.2f}",
+#         f"{http_val:.2f}",
+#         node_ip or "cluster",
+#         LOAD_PROFILE,
+#     ])
+#     raw_file.flush()
 
 # @events.request.add_listener
 # def log_request(request_type, name, response_time, response_length, exception, **kwargs):
@@ -349,20 +350,16 @@ def log_request(request_type, name, response_time, response_length, exception, *
 # USER
 # ==========================
 class PipelineUser(HttpUser):
+    host = INGRESS_HOST
     wait_time = lambda self: 0
-    host = "http://dummy"
-  
+
     def on_start(self):
-        # NON ridefinire self.client
         self.client.headers.update({
             "Connection": "close"
         })
-      
-    @task
-    def send_to_all(self):
-        if not ENTRYPOINTS:
-            return
 
+    @task
+    def send(self):
         img = "your_image.jpg"
         profile = pick_load_profile()
 
@@ -370,22 +367,59 @@ class PipelineUser(HttpUser):
             "X-Test-ID": TEST_ID,
             "X-Load-Profile": profile
         }
-        for name, base_url in ENTRYPOINTS:
-            self.client.base_url = base_url
-            with open(img, "rb") as f:
-                files = {"image": (img, f, "image/jpeg")}
-                # ora lo step risponde 202 quasi subito
-                with self.client.post(
-                    "/process",
-                    files=files,
-                    headers=headers,
-                    name=name,
-                    catch_response=True
-                ) as resp:
-                    if resp.status_code in (200, 202):
-                        resp.success()
-                    else:
-                        resp.failure(f"HTTP {resp.status_code}")
+
+        with open(img, "rb") as f:
+            files = {"image": (img, f, "image/jpeg")}
+            with self.client.post(
+                "/process",
+                files=files,
+                headers=headers,
+                name="step-0",
+                catch_response=True
+            ) as resp:
+                if resp.status_code in (200, 202):
+                    resp.success()
+                else:
+                    resp.failure(f"HTTP {resp.status_code}")
+
+# class PipelineUser(HttpUser):
+#     wait_time = lambda self: 0
+#     host = "http://dummy"
+  
+#     def on_start(self):
+#         # NON ridefinire self.client
+#         self.client.headers.update({
+#             "Connection": "close"
+#         })
+      
+#     @task
+#     def send_to_all(self):
+#         if not ENTRYPOINTS:
+#             return
+
+#         img = "your_image.jpg"
+#         profile = pick_load_profile()
+
+#         headers = {
+#             "X-Test-ID": TEST_ID,
+#             "X-Load-Profile": profile
+#         }
+#         for name, base_url in ENTRYPOINTS:
+#             self.client.base_url = base_url
+#             with open(img, "rb") as f:
+#                 files = {"image": (img, f, "image/jpeg")}
+#                 # ora lo step risponde 202 quasi subito
+#                 with self.client.post(
+#                     "/process",
+#                     files=files,
+#                     headers=headers,
+#                     name=name,
+#                     catch_response=True
+#                 ) as resp:
+#                     if resp.status_code in (200, 202):
+#                         resp.success()
+#                     else:
+#                         resp.failure(f"HTTP {resp.status_code}")
 
 # ==========================
 # REALTIME LOCUST (rps/users)
