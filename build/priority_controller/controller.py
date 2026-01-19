@@ -17,6 +17,8 @@ PRIORITY_THRESHOLDS_LAST_RELOAD = 0
 PRIORITY_THRESHOLDS_RELOAD_INTERVAL = 300  # 5 minuti
 PRIORITY_COOLDOWN = 60  # secondi 
 PRIORITY_DOWNSCALE_GRACE = 600  # 10 minuti
+DOWNSCALE_ZERO_REQUIRED = 3
+ZERO_COUNT = {}
 LAST_NONZERO_INFLIGHT = {}
 LAST_PRIORITY_CHANGE = {}
 # ===== SETUP =====
@@ -324,8 +326,10 @@ def evaluate_priority():
     # by (pipeline_id, step_id)
     # '''
     query = '''
-    sum by (pipeline_id, step_id)(
-      http_requests_in_progress{job=~"pipeline-.*"}
+    sum by (pipeline_id, step_id) (
+      max_over_time(
+        http_requests_in_progress{job=~"pipeline-.*"}[30s]
+      )
     )
     '''
     results = query_prometheus(query)
@@ -337,10 +341,21 @@ def evaluate_priority():
     for metric in results:
         pipeline_id = metric["metric"]["pipeline_id"]
         step_id = int(metric["metric"]["step_id"])
-        in_flight = float(metric["value"][1])
-        if in_flight > 0:
-            LAST_NONZERO_INFLIGHT[(pipeline_id, step_id)] = time.time()
+        key = (pipeline_id, step_id)
+        if in_cooldown(*key):
+            continue
+        # in_flight = float(metric["value"][1])
+        in_flight = max(0.0, float(metric["value"][1]))
+        
+        # if in_flight > 0:
+        #     LAST_NONZERO_INFLIGHT[(pipeline_id, step_id)] = time.time()
+        if in_flight == 0:
+            ZERO_COUNT[key] = ZERO_COUNT.get(key, 0) + 1
+        else:
+            ZERO_COUNT[key] = 0
         new_priority = choose_priority(in_flight)
+        if in_flight > 0 and new_priority != LOW_PRIORITY_CLASS:
+            LAST_NONZERO_INFLIGHT[(pipeline_id, step_id)] = time.time()
         print(
             f"[DECISION] pipeline={pipeline_id} step={step_id} "
             f"in_flight={in_flight:.2f} → target_priority={new_priority}",
@@ -355,6 +370,9 @@ def evaluate_priority():
         #     f"in_flight={in_flight:.1f} → priority={new_priority}",
         #     flush=True
         # )
+        if new_priority == LOW_PRIORITY_CLASS and ZERO_COUNT.get(key, 0) < DOWNSCALE_ZERO_REQUIRED:
+            print(f"[HYSTERESIS] Skip downscale for {key}, zero_count={ZERO_COUNT.get(key, 0)}", flush=True)
+            continue
 
         if new_priority == LOW_PRIORITY_CLASS:
             last_active = LAST_NONZERO_INFLIGHT.get((pipeline_id, step_id))
