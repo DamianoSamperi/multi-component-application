@@ -18,6 +18,7 @@ from urllib.parse import urlparse
 # ==========================
 PROM_URL = "http://192.168.1.251:30090"
 INGRESS_HOST = os.getenv("INGRESS_HOST", "http://192.168.1.99")
+
 CACHE_TTL = 5
 
 # Test id unico per ogni run Locust
@@ -191,14 +192,14 @@ def get_metrics_cached():
 # ==========================
 # DISCOVER ENTRYPOINTS
 # ==========================
-NODE_PORT = 32400  # step-0 NodePort fisso
-NODE_IPS = get_node_ips()
-def get_pipeline_entrypoints():
-    if not NODE_IPS:
-        return []
-    # basta UN endpoint, kube-proxy fa il resto
-    node_ip = random.choice(NODE_IPS)
-    return [("step-0", f"http://{node_ip}:{NODE_PORT}")]
+# NODE_PORT = 32400  # step-0 NodePort fisso
+# NODE_IPS = get_node_ips()
+# def get_pipeline_entrypoints():
+#     if not NODE_IPS:
+#         return []
+#     # basta UN endpoint, kube-proxy fa il resto
+#     node_ip = random.choice(NODE_IPS)
+#     return [("step-0", f"http://{node_ip}:{NODE_PORT}")]
 # def get_pipeline_entrypoints():
 #     pod_list = subprocess.run(
 #         ["kubectl", "get", "pods", "--no-headers", "-o", "custom-columns=:metadata.name"],
@@ -228,8 +229,9 @@ def get_pipeline_entrypoints():
 #                 entry.append((name, f"http://{node_ip}:{node_port}"))
 #     return entry
 
-ENTRYPOINTS = get_pipeline_entrypoints()
-print("Entrypoints:", ENTRYPOINTS)
+# ENTRYPOINTS = get_pipeline_entrypoints()
+# print("Entrypoints:", ENTRYPOINTS)
+ENTRYPOINTS = [("step-0", INGRESS_HOST)]
 print("🧪 TEST_ID:", TEST_ID)
 
 # ==========================
