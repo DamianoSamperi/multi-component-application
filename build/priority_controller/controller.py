@@ -264,6 +264,16 @@ def update_configmap_priority(cm_name, new_priority, step_id):
         namespace=NAMESPACE,
         body=cm
     )
+    dep = apps_v1.read_namespaced_deployment(
+        name=f"{pipeline_id}-step-{step_id}",
+        namespace=NAMESPACE
+    )
+    
+    current_prio = dep.spec.template.spec.priority_class_name or ""
+    if current_prio == new_priority:
+        LAST_PRIORITY_CHANGE[key] = time.time()
+        return
+
     apps_v1.patch_namespaced_deployment(
     name=f"{pipeline_id}-step-{step_id}",
     namespace=NAMESPACE,
