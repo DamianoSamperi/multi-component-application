@@ -45,6 +45,41 @@ def flatten_steps(steps: List[Union[Dict, List]]):
     return flat
 
 
+def generate_ingress(pipeline_id, namespace="default"):
+    return {
+        "apiVersion": "networking.k8s.io/v1",
+        "kind": "Ingress",
+        "metadata": {
+            "name": f"{pipeline_id}-ingress",
+            "namespace": namespace,
+            "annotations": {
+                "nginx.ingress.kubernetes.io/proxy-read-timeout": "600",
+                "nginx.ingress.kubernetes.io/proxy-send-timeout": "600",
+                "nginx.ingress.kubernetes.io/proxy-body-size": "50m",
+            }
+        },
+        "spec": {
+            "rules": [
+                {
+                    "http": {
+                        "paths": [
+                            {
+                                "path": "/",
+                                "pathType": "Prefix",
+                                "backend": {
+                                    "service": {
+                                        "name": f"{pipeline_id}-step-0",
+                                        "port": {"number": 5000}
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+    }
+
 
 # --- YAML Builders ---
 def generate_configmap(step, pipeline_id, namespace="default"):
@@ -243,10 +278,18 @@ def generate_services(steps: List[Dict], pipeline_prefix: str, namespace="defaul
             "ports": [{"name": "http","port": 5000, "targetPort": 5000}],
         }
         
+        # if step["id"] == 0:
+            # spec["type"] = "NodePort"
+            # spec["type"] = "ClusterIP"
+            # spec["externalTrafficPolicy"] = "Cluster" 
+            # spec["ports"] = [{"name": "http", "port": 5000, "targetPort": 5000,"nodePort": 32400}]
         if step["id"] == 0:
-            spec["type"] = "NodePort"
-            spec["externalTrafficPolicy"] = "Cluster" 
-            spec["ports"] = [{"name": "http", "port": 5000, "targetPort": 5000,"nodePort": 32400}]
+            spec["type"] = "ClusterIP"
+            spec["ports"] = [{
+                "name": "http",
+                "port": 5000,
+                "targetPort": 5000
+            }]
         # service = {
         #     "apiVersion": "v1",
         #     "kind": "Service",
@@ -308,7 +351,14 @@ def create_pipeline():
         for svc in services:
             v1.create_namespaced_service(namespace="default", body=svc)
             results.append(f"✅ Service creato per {svc['metadata']['name']}")
+            
+        # ----Creazione Ingress ---    
+        net_v1 = client.NetworkingV1Api()
 
+        ing = generate_ingress(pipeline_id)
+        net_v1.create_namespaced_ingress(namespace="default", body=ing)
+        results.append("✅ Ingress creato")
+        
         return jsonify({"status": "ok", "pipeline_id": pipeline_id, "results": results})
 
     except Exception as e:
@@ -330,6 +380,12 @@ def delete_pipeline(pipeline_id):
         apps_v1.delete_collection_namespaced_deployment(namespace="default",label_selector=f"pipeline_id={pipeline_id}",body=delete_opts)
         v1.delete_collection_namespaced_config_map(namespace="default", label_selector=f"pipeline_id={pipeline_id}", body=delete_opts)
         v1.delete_collection_namespaced_service(namespace="default", label_selector=f"pipeline_id={pipeline_id}", body=delete_opts)
+        net_v1 = client.NetworkingV1Api()
+        net_v1.delete_namespaced_ingress(
+            name=f"{pipeline_id}-ingress",
+            namespace="default",
+            body=client.V1DeleteOptions()
+        )
 
         return jsonify({"status": "deleted", "pipeline_id": pipeline_id})
     except Exception as e:
@@ -341,6 +397,7 @@ def delete_all_pipelines():
         config.load_incluster_config()
         v1 = client.CoreV1Api()
         apps_v1 = client.AppsV1Api()
+        net_v1 = client.NetworkingV1Api()
 
         delete_opts = client.V1DeleteOptions()
 
@@ -358,6 +415,11 @@ def delete_all_pipelines():
             body=delete_opts
         )
         v1.delete_collection_namespaced_service(
+            namespace="default",
+            label_selector=selector,
+            body=delete_opts
+        )
+        net_v1.delete_collection_namespaced_ingress(
             namespace="default",
             label_selector=selector,
             body=delete_opts
