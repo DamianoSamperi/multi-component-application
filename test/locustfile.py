@@ -17,6 +17,7 @@ from urllib.parse import urlparse
 # CONFIG
 # ==========================
 PROM_URL = "http://192.168.1.251:30090"
+INGRESS_HOST = os.getenv("INGRESS_HOST", "http://192.168.1.99")
 CACHE_TTL = 5
 
 # Test id unico per ogni run Locust
