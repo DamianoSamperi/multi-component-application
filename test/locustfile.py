@@ -567,7 +567,7 @@ def prom_export_summary(test_id: str, duration_s: int):
     # ------------------------
     write_header = not os.path.exists("gpu_summary.csv")
 
-    with open("gpu_summary.csv", "a", newline="") as f:
+    with open("gpu_summary.csv", "w", newline="") as f:
         w = csv.writer(f)
         if write_header:
             w.writerow([
@@ -652,7 +652,7 @@ def prom_export_summary(test_id: str, duration_s: int):
     write_header = not os.path.exists("gpu_by_device.csv")
     
     
-    with open("gpu_by_device.csv", "a", newline="") as f:
+    with open("gpu_by_device.csv", "w", newline="") as f:
         w = csv.writer(f)
         if write_header:
             w.writerow([
