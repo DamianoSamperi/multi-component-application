@@ -579,15 +579,14 @@ def prom_export_summary(test_id: str, duration_s: int):
 
     with open("gpu_summary.csv", "w", newline="") as f:
         w = csv.writer(f)
-        if write_header:
-            w.writerow([
-                "test_id",
-                "duration_s",
-                "node_ip",
-                "gpu_avg_60s",
-                "gpu_avg_test",
-                "load_profile"
-            ])
+        w.writerow([
+            "test_id",
+            "duration_s",
+            "node_ip",
+            "gpu_avg_60s",
+            "gpu_avg_test",
+            "load_profile"
+        ])
 
         all_nodes = set(gpu_60s_map) | set(gpu_test_map)
         for node in sorted(all_nodes):
@@ -664,14 +663,13 @@ def prom_export_summary(test_id: str, duration_s: int):
     
     with open("gpu_by_device.csv", "w", newline="") as f:
         w = csv.writer(f)
-        if write_header:
-            w.writerow([
-                "test_id",
-                "gpu_class",
-                "avg_gpu_60s",
-                "avg_gpu_test",
-                "load_profile"
-            ])
+        w.writerow([
+            "test_id",
+            "gpu_class",
+            "avg_gpu_60s",
+            "avg_gpu_test",
+            "load_profile"
+        ])
     
         for gpu_class in sorted(set(avg_gpu_by_class_60s) | set(avg_gpu_by_class_test)):
             w.writerow([
