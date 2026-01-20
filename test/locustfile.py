@@ -348,7 +348,35 @@ def node_ip_from_base_url():
 #         LOAD_PROFILE,
 #     ])
 #     raw_file.flush()
+@events.request.add_listener
+def log_request(request_type, name, response_time, response_length, exception, **kwargs):
+    gpu_dict, http_dict = get_metrics_cached()
 
+    node_ip = node_ip_from_base_url()
+
+    gpu_val = gpu_dict.get(node_ip, 0) if node_ip else 0
+    http_val = http_dict.get("step-0", 0)
+
+    status_code = (
+        kwargs.get("response").status_code
+        if kwargs.get("response") is not None
+        else ""
+    )
+
+    raw_writer.writerow([
+        time.strftime("%Y-%m-%d %H:%M:%S"),
+        TEST_ID,
+        request_type,
+        name,
+        f"{response_time:.2f}",
+        "OK" if exception is None else "FAIL",
+        status_code,
+        f"{gpu_val:.2f}",
+        f"{http_val:.2f}",
+        node_ip or "ingress",
+        LOAD_PROFILE,
+    ])
+    raw_file.flush()
 # ==========================
 # USER
 # ==========================
