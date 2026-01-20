@@ -18,7 +18,10 @@ from urllib.parse import urlparse
 # ==========================
 PROM_URL = "http://192.168.1.251:30090"
 INGRESS_HOST = os.getenv("INGRESS_HOST", "http://192.168.1.99")
-
+PIPELINE_ID = os.getenv("PIPELINE_ID")
+if not PIPELINE_ID:
+    raise RuntimeError("PIPELINE_ID not set")
+  
 CACHE_TTL = 5
 
 # Test id unico per ogni run Locust
@@ -238,24 +241,31 @@ print("🧪 TEST_ID:", TEST_ID)
 # STEP -> NODE MAP
 # ==========================
 
-def get_step_node_map(prefix="pipeline-"):
+def get_step_node_map(pipeline_id: str):
     out = subprocess.run(
         ["kubectl", "get", "pods", "-n", "default", "--no-headers",
          "-o", "custom-columns=:metadata.name,:status.hostIP"],
         stdout=subprocess.PIPE, text=True, check=True
     )
-    mapping = {}
+
+    mapping = {}  # step_id -> set(node_ip)
     for line in out.stdout.splitlines():
-        parts = line.split()
-        if len(parts) != 2:
+        pod, host_ip = line.split()
+
+        if f"pipeline-{pipeline_id}-step-" not in pod:
             continue
-        pod, host_ip = parts
-        if prefix in pod and "step-" in pod:
-            step_name = "-".join(pod.split("-")[3:5])  # es. "0-xxxxxx"
-            mapping[step_name] = host_ip
+
+        # estrae step-N
+        parts = pod.split("-")
+        step_idx = parts.index("step") + 1
+        step_id = parts[step_idx]
+
+        mapping.setdefault(step_id, set()).add(host_ip)
+
     return mapping
 
-STEP_NODE_MAP = get_step_node_map()
+STEP_NODE_MAP = get_step_node_map(PIPELINE_ID)
+pipeline_node_ips = {ip for ips in STEP_NODE_MAP.values() for ip in ips}
 print("Step → Node:", STEP_NODE_MAP)
 
 # def node_ip_for_step(step_idx: int):
@@ -603,7 +613,7 @@ def prom_export_summary(test_id: str, duration_s: int):
             NODE_GPU_CLASS[node_name] = "orin"
     
     # solo nodi coinvolti nella pipeline (IP)
-    pipeline_node_ips = set(STEP_NODE_MAP.values())
+    # pipeline_node_ips = {ip for ips in STEP_NODE_MAP.values() for ip in ips}
     
     gpu_by_class_60s = {}
     gpu_by_class_test = {}
