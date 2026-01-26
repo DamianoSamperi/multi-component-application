@@ -107,6 +107,24 @@ def wait_for_pod_not_ready(pod_name, timeout_s=180):
             return
 
         time.sleep(1)
+def find_pod_to_fix(pods, target_priority):
+    for pod in pods:
+        if pod.status.phase != "Running":
+            continue
+
+        ready = False
+        for cond in pod.status.conditions or []:
+            if cond.type == "Ready" and cond.status == "True":
+                ready = True
+                break
+
+        if not ready:
+            continue
+
+        if not pod_already_on_suitable_node(pod, target_priority):
+            return pod
+
+    return None
 
 # ===== GPU FACTORS (QoSAware) =====
 
@@ -236,48 +254,67 @@ def update_configmap_priority(cm_name, new_priority, step_id):
     pipeline_id = cm.metadata.labels["pipeline_id"]
     key = (pipeline_id, step_id)
 
-    #  COOLDOWN CHECK – SUBITO
+    # ===== COOLDOWN =====
     if in_cooldown(*key):
-        print(
-            f"[COOLDOWN] Skip priority change for {key}, still in cooldown",
-            flush=True
-        )
+        print(f"[COOLDOWN] Skip priority change for {key}", flush=True)
         return
 
+    # ===== AGGIORNA CONFIGMAP SOLO SE CAMBIA =====
     updated = False
-
-    #  DECISIONE
     for step in data.get("steps", []):
         if step["id"] == step_id:
             if step["priority"] == new_priority:
-                return
+                break
             step["priority"] = new_priority
             updated = True
+            break
 
     if not updated:
         return
 
-    # COMMIT CONFIGMAP
     cm.data["PIPELINE_CONFIG"] = yaml.dump(data)
     v1.replace_namespaced_config_map(
         name=cm_name,
         namespace=NAMESPACE,
         body=cm
     )
-    dep = apps_v1.read_namespaced_deployment(
-        name=f"{pipeline_id}-step-{step_id}",
-        namespace=NAMESPACE
-    )
-    
-    current_prio = dep.spec.template.spec.priority_class_name or ""
-    if current_prio == new_priority:
+
+    # ===== POD ATTUALI =====
+    pods = get_pods_for_step(pipeline_id=pipeline_id, step_id=step_id)
+
+    # trova UN pod che NON soddisfa il target
+    pod_to_fix = None
+    for pod in pods:
+        if pod.status.phase != "Running":
+            continue
+
+        ready = False
+        for cond in pod.status.conditions or []:
+            if cond.type == "Ready" and cond.status == "True":
+                ready = True
+                break
+
+        if not ready:
+            continue
+
+        if not pod_already_on_suitable_node(pod, new_priority):
+            pod_to_fix = pod
+            break
+
+    if not pod_to_fix:
+        print(
+            f"[SKIP] Tutti i pod già adeguati per priority={new_priority} "
+            f"({pipeline_id}, step {step_id})",
+            flush=True
+        )
         LAST_PRIORITY_CHANGE[key] = time.time()
         return
 
+    # ===== PATCH DEPLOYMENT  =====
     apps_v1.patch_namespaced_deployment(
-    name=f"{pipeline_id}-step-{step_id}",
-    namespace=NAMESPACE,
-    body={
+        name=f"{pipeline_id}-step-{step_id}",
+        namespace=NAMESPACE,
+        body={
             "spec": {
                 "template": {
                     "spec": {
@@ -291,41 +328,15 @@ def update_configmap_priority(cm_name, new_priority, step_id):
     LAST_PRIORITY_CHANGE[key] = time.time()
 
     print(
-        f"[UPDATE] ConfigMap {cm_name} aggiornata con priority={new_priority} per step {step_id}",
+        f"[UPDATE] priority={new_priority} pipeline={pipeline_id} step={step_id}",
         flush=True
     )
 
-    # DRAIN + ROLLOUT
-    pods = get_pods_for_step(pipeline_id=pipeline_id, step_id=step_id)
-    pod_to_drain = None
-    for pod in pods:
-        if pod.status.phase != "Running":
-            continue
-        for cond in pod.status.conditions or []:
-            if cond.type == "Ready" and cond.status == "True":
-                pod_to_drain = pod
-                break
-
-        if pod_to_drain:
-            break
-
-    if not pod_to_drain:
-        print("[INFO] Nessun pod READY da drainare", flush=True)
-    else:
-        if pod_already_on_suitable_node(pod_to_drain, new_priority):
-            print(
-                f"[SKIP] Pod {pod_to_drain.metadata.name} già su nodo adeguato "
-                f"(priority={new_priority})",
-                flush=True
-            )
-            return
-    
-        if pod_to_drain.status.pod_ip:
-            notify_pod_drain(pod_to_drain.status.pod_ip)
-            wait_for_pod_not_ready(pod_to_drain.metadata.name)
-
-    # restart_deployment_for_step(pipeline_id=pipeline_id, step_id=step_id)
-
+    # ===== DRAIN DI UN SOLO POD =====
+    if pod_to_fix.status.pod_ip:
+        notify_pod_drain(pod_to_fix.status.pod_ip)
+        wait_for_pod_not_ready(pod_to_fix.metadata.name)
+ 
 
 def choose_priority(in_flight: float) -> str:
     refresh_priority_thresholds_if_needed()
