@@ -23,6 +23,8 @@ DEFAULT_LOAD_PROFILE = os.getenv("DEFAULT_LOAD_PROFILE", "light")
 accepting_requests = True
 shutdown_event = threading.Event()
 
+inflight_lock = threading.Lock()
+local_inflight = 0
 
 
 @app.route("/readyz")
@@ -75,12 +77,14 @@ def handle_sigterm(signum, frame):
     start = time.time()
 
     while True:
-        try:
-            inflight = http_request_in_progress.labels(
-                PIPELINE_ID, STEP_ID, POD_NAME
-            )._value.get()
-        except Exception:
-            inflight = 0  # se non inizializzato, usciamo
+        # try:
+        #     inflight = http_request_in_progress.labels(
+        #         PIPELINE_ID, STEP_ID, POD_NAME
+        #     )._value.get()
+        # except Exception:
+        #     inflight = 0  # se non inizializzato, usciamo
+        with inflight_lock:
+            inflight = local_inflight
 
         if inflight <= 0:
             print("[SIGTERM] All requests completed, exiting")
@@ -93,7 +97,9 @@ def handle_sigterm(signum, frame):
         print(f"[SIGTERM] Waiting inflight={inflight}")
         time.sleep(1)
 
-    sys.exit(0)
+    #sys.exit(0)
+    os._exit(0)
+
 
 
 signal.signal(signal.SIGTERM, handle_sigterm)
@@ -104,13 +110,15 @@ def drain():
     global accepting_requests
     accepting_requests = False
 
-    inflight = 0
-    try:
-        inflight = http_request_in_progress.labels(
-            PIPELINE_ID, STEP_ID, POD_NAME
-        )._value.get()
-    except Exception:
-        pass
+    # inflight = 0
+    # try:
+    #     inflight = http_request_in_progress.labels(
+    #         PIPELINE_ID, STEP_ID, POD_NAME
+    #     )._value.get()
+    # except Exception:
+    #     pass
+    with inflight_lock:
+        inflight = local_inflight
 
     print(f"[DRAIN] draining enabled, inflight={inflight}")
     return jsonify({"status": "draining", "inflight": inflight}), 200
@@ -132,6 +140,9 @@ def before_request():
     # incrementa solo se è /process accettata
     if g.count_inflight:
         http_request_in_progress.labels(PIPELINE_ID, STEP_ID, POD_NAME).inc()
+        global local_inflight
+        with inflight_lock:
+            local_inflight += 1
         http_requests_total.labels(
             request.method, request.path, PIPELINE_ID, STEP_ID, POD_NAME
         ).inc()
@@ -151,6 +162,9 @@ def after_request(response):
     elapsed = time.time() - g.start_time
     # http_request_in_progress.labels(PIPELINE_ID, STEP_ID, POD_NAME).dec()
     if getattr(g, "count_inflight", False):
+        global local_inflight
+        with inflight_lock:
+            local_inflight -= 1
         http_request_in_progress.labels(PIPELINE_ID, STEP_ID, POD_NAME).dec()
     response.headers["X-Elapsed-Time"] = str(elapsed)
     return response
@@ -162,6 +176,18 @@ def metrics():
 # Cache globale protetta da un Lock per evitare problemi di concorrenza
 active_steps_cache = set()
 cache_lock = threading.Lock()
+
+def wait_next_ready(url, timeout=5):
+    start = time.time()
+    while time.time() - start < timeout:
+        try:
+            r = requests.get(url.replace("/process", "/readyz"), timeout=1)
+            if r.status_code == 200:
+                return True
+        except:
+            pass
+        time.sleep(0.3)
+    return False
 
 def update_kubernetes_config():
     """Aggiorna la cache degli step attivi ogni 10 secondi."""
@@ -287,6 +313,8 @@ ram_semaphore = threading.Semaphore(1)
 def process():
     # Usiamo il semaforo per assicurarci che solo N richieste alla volta carichino immagini
     with ram_semaphore:
+        if not accepting_requests:
+            return jsonify({"error": "draining"}), 503    
         try:
             image_file = request.files["image"]
             image = Image.open(image_file).convert("RGB")
@@ -340,16 +368,21 @@ def process():
                 "X-Test-ID": g.test_id,
                 "X-Load-Profile": g.load_profile,  # 🔹 PROPAGAZIONE
             }
+            if not accepting_requests:
+                return jsonify({"error": "draining"}), 503
+            if not wait_next_ready(next_url):
+                return jsonify({"error": "next step not ready"}), 503
             threading.Thread(
                 target=send_to_next_step_async,
                 args=(next_url, files, fwd_headers),
                 daemon=True
             ).start()
-
+            with inflight_lock:
+                inflight = local_inflight
             headers = {
                 "X-Step-ID": str(STEP_ID),
                 "X-Pod-Name": POD_NAME,
-                "X-In-Flight": str(http_request_in_progress.labels(PIPELINE_ID, STEP_ID, POD_NAME)._value.get())
+                "X-In-Flight": str(inflight)
             }
             return jsonify({"status": "forwarded", "next": chosen_next}), 202, headers
 
